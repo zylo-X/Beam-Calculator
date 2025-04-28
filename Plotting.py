@@ -198,7 +198,7 @@ def Matplot_shear_force(X_Field,Total_ShearForce):
     # --- Show Shear Force Plot Separately ---
     fig_shear.tight_layout()
     fig_shear.show()
-    plt.close(fig_shear)
+    #plt.close(fig_shear)
 
 def Matplot_bending_moment(X_Field,Total_BendingMoment):
     # --- Bending Moment Diagram Data ---
@@ -241,5 +241,16 @@ def Matplot_bending_moment(X_Field,Total_BendingMoment):
 
     # --- Show Bending Moment Plot Separately ---
     fig_bend.tight_layout()
+    plt.close(fig_bend)
     fig_bend.show()
     plt.close(fig_bend)
+
+def Matplot_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment):
+    # --- Call Matplotlib Functions ---
+    Matplot_shear_force(X_Field, Total_ShearForce)
+    Matplot_bending_moment(X_Field, Total_BendingMoment)
+
+def Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length):
+    # --- Call Plotly Functions ---
+    Plotly_shear_force(X_Field, Total_ShearForce, beam_length)
+    Plotly_bending_moment(X_Field, Total_BendingMoment, beam_length)

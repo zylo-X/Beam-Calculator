@@ -23,10 +23,10 @@ Triangleloads = np.empty((0, 4))  # (Fixed: Safer empty array shape)
 momentloads = np.array([[3.2, -8]])
 
 # --- Load Presence Flags ---
-Test_pointloads = len(pointloads[0])
-Test_momentloads = len(momentloads[0])
-Test_UDLs = len(distributedloads[0])
-Test_TRLs = len(Triangleloads[0])
+Test_pointloads = len(pointloads[0]) if pointloads.shape[0] > 0 else 0
+Test_momentloads = len(momentloads[0]) if momentloads.shape[0] > 0 else 0
+Test_UDLs = len(distributedloads[0]) if distributedloads.shape[0] > 0 else 0
+Test_TRLs = len(Triangleloads[0]) if Triangleloads.shape[0] > 0 else 0
 
 # --------------------------------------------------------------------------------
 #         Solver Initialization Functions
@@ -347,27 +347,23 @@ def Calculate_SF_BM(X_Field, A, B,
 def solve_simple_beam(beam_length, A, B):
     """
     High-level function to solve a simple beam completely.
-    
-    Parameters:
-    - beam_length: Length of beam (meters)
-    - A: Position of Pin Support (meters)
-    - B: Position of Roller Support (meters)
-    
+
     Returns:
-    - X_Field: Array of x-positions
-    - Total_ShearForce: Shear Force at each x-position
-    - Total_BendingMoment: Bending Moment at each x-position
+    - X_Field
+    - Total_ShearForce
+    - Total_BendingMoment
+    - Reactions (Array: [Va, Ha, Vb])
     """
 
-    # Initialize Solver
+    # --- Initialize Solver ---
     X_Field, Delta = initialize_solver(beam_length)
 
-    # Initialize Containers
+    # --- Initialize Containers ---
     (Reactions, Force_Reactions_Recorder, Moment_Reactions_Recorder,
      UDLs_Reactions_Recorder, TRLs_Reactions_Recorder,
      ShearForce_Recorder, BendingMoment_Recorder) = initialize_containers(X_Field)
 
-    # Solve Reactions
+    # --- Solve Reactions ---
     (Reactions,
      Force_Reactions_Recorder,
      Moment_Reactions_Recorder,
@@ -379,7 +375,7 @@ def solve_simple_beam(beam_length, A, B):
                                                      UDLs_Reactions_Recorder,
                                                      TRLs_Reactions_Recorder)
 
-    # Solve Shear Force and Bending Moment
+    # --- Solve Shear Force and Bending Moment ---
     Total_ShearForce, Total_BendingMoment = Calculate_SF_BM(X_Field, A, B,
                                                             Force_Reactions_Recorder,
                                                             ShearForce_Recorder,
@@ -388,5 +384,5 @@ def solve_simple_beam(beam_length, A, B):
                                                             UDLs_Reactions_Recorder,
                                                             TRLs_Reactions_Recorder)
 
-    # DONE
-    return X_Field, Reactions, Total_ShearForce, Total_BendingMoment
+    # --- RETURN EVERYTHING ---
+    return X_Field, Total_ShearForce, Total_BendingMoment, Reactions
