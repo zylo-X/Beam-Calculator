@@ -254,3 +254,54 @@ def Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length):
     # --- Call Plotly Functions ---
     Plotly_shear_force(X_Field, Total_ShearForce, beam_length)
     Plotly_bending_moment(X_Field, Total_BendingMoment, beam_length)
+
+
+def format_loads_for_plotting(loads_dict):
+    """
+    Transform the dynamic load inputs into a list of tuples 
+    in the format required by your plotting routines.
+    
+    Parameters:
+      loads_dict: Dictionary containing keys "pointloads", "distributedloads",
+                  "momentloads", and "triangleloads".
+                  
+    Returns:
+      A list of loads formatted as:
+         ("point_load", pos, magnitude)
+         ("udl", start, end, intensity)
+         ("moment", pos, moment)
+         ("trl", ...)  # if applicable
+    """
+    formatted_loads = []
+    
+    # Process point loads:
+    for load in loads_dict.get("pointloads", []):
+        pos, Fx, Fy = load
+        # Choose which component to plot.
+        # Here, we choose vertical if its magnitude is greater (or equal) than horizontal.
+        if abs(Fy) >= abs(Fx):
+            mag = Fy
+        else:
+            # Option: For a horizontal load, you might want to plot it differently.
+            # For now, we simply take the horizontal force.
+            mag = Fx
+        formatted_loads.append(("point_load", pos, mag))
+        
+    # Process distributed loads (UDL):
+    for udl in loads_dict.get("distributedloads", []):
+        start, end, intensity = udl
+        formatted_loads.append(("udl", start, end, intensity))
+        
+    # Process moment loads:
+    for mom in loads_dict.get("momentloads", []):
+        pos, moment = mom
+        formatted_loads.append(("moment", pos, moment))
+    
+    # Optionally, process triangular loads if provided.
+    # For now, if no triangular loads are used, we can leave this empty.
+    for trl in loads_dict.get("triangleloads", []):
+        # Assuming each triangular load is defined as [start, end, start_intensity, end_intensity]
+        start, end, intensity_start, intensity_end = trl
+        formatted_loads.append(("trl", start, end, intensity_start, intensity_end))
+    
+    return formatted_loads

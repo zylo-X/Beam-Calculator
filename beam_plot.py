@@ -1,69 +1,65 @@
-# beam_plot.py
-
-import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-import numpy as np
+import plotly.graph_objs as go
 import plotting_helper as ph
 
-def plot_beam_schematic(X_Field, beam_length, A, B, support_types, loads, reactions):
-    """
-    Plots the full beam schematic after solving.
+def plot_beam_schematic(beam_length, A, B, support_types, loads):
+    fig = make_subplots(rows=1, cols=1)
 
-    Parameters:
-    - X_Field: Beam positions
-    - beam_length: Beam Length
-    - A, B: Support positions
-    - support_types: tuple ("pin", "roller")
-    - loads: list [ ("point_load", pos, mag), ("udl", start, end, mag), ("moment", pos, mag) ]
-    - reactions: [Va, Ha, Vb]
-    """
+    # Beam line
+    fig.add_trace(ph.draw_beam(beam_length))
 
-    fig = make_subplots(
-        rows=1,
-        cols=1,
-        vertical_spacing=0.1,
-        subplot_titles=("Beam Schematic",),
-    )
-
-    # --- Beam Line ---
-    fig = ph.draw_beam_line(fig, 0, beam_length)
-
-    # --- Supports ---
-    if support_types[0] == "pin":
-        fig = ph.draw_support_pin(fig, A)
-    elif support_types[0] == "roller":
-        fig = ph.draw_support_roller(fig, A)
-
-    if support_types[1] == "pin":
-        fig = ph.draw_support_pin(fig, B)
-    elif support_types[1] == "roller":
-        fig = ph.draw_support_roller(fig, B)
-
-    # --- Loads ---
+    # Loads
     for load in loads:
         if load[0] == "point_load":
-            fig = ph.draw_point_load(fig, load[2], load[1])
+            fig.add_trace(ph.draw_point_load(*load[1:]))
         elif load[0] == "udl":
-            fig = ph.draw_distributed_load(fig, load[1], load[2], load[3])
+            for trace in ph.draw_udl(*load[1:]):
+                fig.add_trace(trace)
         elif load[0] == "moment":
-            fig = ph.draw_point_moment(fig, load[2], load[1])
+            for trace in ph.draw_moment(*load[1:]):
+                fig.add_trace(trace)
+    # Supports
+    fig.add_trace(ph.draw_big_support(A, support_types[0]))
+    fig.add_trace(ph.draw_big_support(B, support_types[1]))
 
-    # --- Reactions ---
-    Va, Ha, Vb = reactions
-    ph.draw_reaction_arrow(fig, Va, A)
-    ph.draw_reaction_arrow(fig, Vb, B)
-
-    # --- Layout ---
     fig.update_layout(
-        height=500,
         width=1000,
-        title={"text": "Beam External Schematic", "x": 0.5},
-        title_font_size=22,
-        showlegend=False,
+        height=600,
+        title=dict(text="Beam Schematic", x=0.4),
+        xaxis=dict(title="Beam Length (m)", range=[-0.5, beam_length + 0.5]),
+        yaxis=dict(title="", range=[-2, 2], showgrid=False, zeroline=False),
         hovermode="closest",
+        plot_bgcolor="rgba(173,216,230,0.3)"  # Light blue background
     )
-
-    fig.update_xaxes(title_text="Beam Length (m)")
-    fig.update_yaxes(title_text="")
-
     fig.show()
+
+
+def plot_reaction_diagram(A, B, reactions,support_types):
+    Va, Ha, Vb = reactions
+    fig = make_subplots(rows=1, cols=1)
+
+
+    fig.add_trace(ph.draw_beam(B + 0.5))  # baseline
+    fig.add_trace(ph.draw_reaction(A, Va))
+    fig.add_trace(ph.draw_reaction(B, Vb))
+    
+
+
+    if abs(Ha) > 0:
+        fig.add_trace(ph.draw_horizontal_reaction(A, Ha))
+
+    # Supports
+    fig.add_trace(ph.draw_support(A, support_types[0]))
+    fig.add_trace(ph.draw_support(B, support_types[1]))
+
+    fig.update_layout(
+        width=800,
+        height=400,
+        title=dict(text="Support Reaction Diagram", x=0.4),
+        xaxis=dict(title="Beam Length (m)", range=[-0.5, B + 0.5]),
+        yaxis=dict(title="", range=[-2, 2], showgrid=False, zeroline=False, showticklabels=False),  # Removed Y-axis numbers
+        hovermode="closest",
+        plot_bgcolor="rgba(173,216,230,0.3)"  # Light blue background
+    )
+    fig.show()
+
