@@ -1,0 +1,114 @@
+[
+  {
+    "Material": "Structural Steel",
+    "Density": 7850,
+    "Yield Strength": 250,
+    "Ultimate Strength": 400,
+    "Elastic Modulus": 200,
+    "Poisson Ratio": 0.3
+  },
+  {
+    "Material": "Reinforced Concrete",
+    "Density": 2400,
+    "Yield Strength": 40,
+    "Ultimate Strength": 60,
+    "Elastic Modulus": 25,
+    "Poisson Ratio": 0.2
+  },
+  {
+    "Material": "Aluminum Alloy (6061-T6)",
+    "Density": 2700,
+    "Yield Strength": 275,
+    "Ultimate Strength": 310,
+    "Elastic Modulus": 69,
+    "Poisson Ratio": 0.33
+  },
+  {
+    "Material": "Timber (Douglas Fir)",
+    "Density": 530,
+    "Yield Strength": 40,
+    "Ultimate Strength": 55,
+    "Elastic Modulus": 12,
+    "Poisson Ratio": 0.38
+  },
+  {
+    "Material": "Cast Iron",
+    "Density": 7200,
+    "Yield Strength": 130,
+    "Ultimate Strength": 200,
+    "Elastic Modulus": 110,
+    "Poisson Ratio": 0.25
+  },
+  {
+    "Material": "High Strength Low Alloy Steel",
+    "Density": 7850,
+    "Yield Strength": 480,
+    "Ultimate Strength": 620,
+    "Elastic Modulus": 200,
+    "Poisson Ratio": 0.3
+  },
+  {
+    "Material": "Glass Fiber Reinforced Polymer (GFRP)",
+    "Density": 1900,
+    "Yield Strength": 345,
+    "Ultimate Strength": 620,
+    "Elastic Modulus": 40,
+    "Poisson Ratio": 0.28
+  },
+  {
+    "Material": "Carbon Fiber Reinforced Polymer (CFRP)",
+    "Density": 1600,
+    "Yield Strength": 600,
+    "Ultimate Strength": 1200,
+    "Elastic Modulus": 150,
+    "Poisson Ratio": 0.3
+  },
+  {
+    "Material": "Stainless Steel (304)",
+    "Density": 8000,
+    "Yield Strength": 215,
+    "Ultimate Strength": 505,
+    "Elastic Modulus": 193,
+    "Poisson Ratio": 0.29
+  },
+  {
+    "Material": "Brick Masonry",
+    "Density": 1920,
+    "Yield Strength": 5,
+    "Ultimate Strength": 15,
+    "Elastic Modulus": 5,
+    "Poisson Ratio": 0.2
+  },
+  {
+    "Material": "Polyvinyl Chloride (PVC)",
+    "Density": 1380,
+    "Yield Strength": 52,
+    "Ultimate Strength": 55,
+    "Elastic Modulus": 3,
+    "Poisson Ratio": 0.4
+  },
+  {
+    "Material": "Copper",
+    "Density": 8960,
+    "Yield Strength": 70,
+    "Ultimate Strength": 210,
+    "Elastic Modulus": 110,
+    "Poisson Ratio": 0.34
+  },
+  {
+    "Material": "Granite",
+    "Density": 2750,
+    "Yield Strength": 4,
+    "Ultimate Strength": 20,
+    "Elastic Modulus": 50,
+    "Poisson Ratio": 0.23
+  },
+  {
+    "Material": "Fiber Reinforced Concrete",
+    "Density": 2400,
+    "Yield Strength": 50,
+    "Ultimate Strength": 70,
+    "Elastic Modulus": 28,
+    "Poisson Ratio": 0.21
+  }
+]
