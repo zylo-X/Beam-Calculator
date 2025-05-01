@@ -48,6 +48,11 @@ shape = ""
 c = 0.0
 b = 0.0
 y_array = np.array([])
+project_loaded = False
+profile_loaded = False
+material_loaded = False
+loads_loaded = False
+
 # -----------------------------
 
 # =============================
@@ -188,6 +193,7 @@ def apply_loaded_project():
     Total_ShearForce = np.array(current_project.get('Total_ShearForce', []))
     Total_BendingMoment = np.array(current_project.get('Total_BendingMoment', []))
     Reactions = np.array(current_project.get('Reactions', []))
+
 
 # =============================
 def delete_project():
@@ -391,203 +397,194 @@ def select_material():
         return None
 
 # =============================
-
 def run_extended_menu():
-    """
-    The main loop to run the extended menu.
-    Coordinates calls to various submenus and functions.
-    """
     global current_project
+    global project_loaded, profile_loaded, material_loaded, loads_loaded, supports_loaded
+    global beam_length, A, B, A_restraint, B_restraint, A_type, B_type
+    global Ix, shape, c, b, y_array
+    global selected_material, density, yield_strength, ultimate_strength, elastic_modulus, poisson_ratio, shear_yield_strength
+    global pointloads, distributedloads, momentloads, triangleloads, loads
+    global support_types
+
     load_material_database()
-    Support_defined = False
+
+    # Flags for load/project state
+    project_loaded = False
+    profile_loaded = False
+    material_loaded = False
+    loads_loaded = False
+    supports_loaded = False
+
     while True:
         selection = main_menu_template()
+
         if selection == '1':  # Project Management
             while True:
                 sub_choice = project_management_menu()
-                if sub_choice == '4':  # Return to main menu
+                if sub_choice == '4':
                     break
+                elif sub_choice == '1':
+                    New_Project()
+                    project_loaded = profile_loaded = material_loaded = loads_loaded = supports_loaded = False
+                    break
+                elif sub_choice == '2':
+                    load_project()
+                    apply_loaded_project()
+                    project_loaded = profile_loaded = material_loaded = loads_loaded = supports_loaded = True
+                    break
+                elif sub_choice == '3':
+                    delete_project()
                 else:
-                    if sub_choice == '1':
-                        New_Project()
-                        break
-                    elif sub_choice == '2':
-                        load_project()
-                        apply_loaded_project()
-                        break
-                    elif sub_choice == '3':
-                        delete_project()
-                    else:
-                        print_error("Invalid selection! Please try again.")
-                        time.sleep(1)
+                    print_error("Invalid selection! Please try again.")
+                    time.sleep(1)
+
         elif selection == '2':  # Profile Definition
             while True:
                 sub_choice = profile_definition_menu()
-                if sub_choice == '4':  # Return to main menu
+                if sub_choice == '4':
                     break
-                else:
-                    if sub_choice == '1':  # Enter Beam Length
+                elif sub_choice == '1':
+                    if project_loaded:
+                        print(colored("Beam length was loaded from a saved project. Skipping input.", "yellow"))
+                        time.sleep(1)
+                    else:
                         beam_length = Beam_Length()
                         print(f"Beam Length is set to: {beam_length} m")
                         time.sleep(2)
-                    elif sub_choice == '2':  # Define Profile
+                elif sub_choice == '2':
+                    if profile_loaded:
+                        print(colored("Profile was loaded from saved project. Skipping profile selection.", "yellow"))
+                        time.sleep(1)
+                    else:
                         profile_choice = choose_profile()
                         if profile_choice == '1':
-                            print("I-beam profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_ibeam()
-                            time.sleep(2)
                         elif profile_choice == '2':
-                            print("T-beam profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_tbeam()
-                            time.sleep(2)
                         elif profile_choice == '3':
-                            print("Solid Circle profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_circle()
-                            time.sleep(2)
                         elif profile_choice == '4':
-                            print("Hollow Circle profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_circle()
-                            time.sleep(2)
                         elif profile_choice == '5':
-                            print("Square profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_square()
-                            time.sleep(2)
                         elif profile_choice == '6':
-                            print("Hollow Square profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_hollow_square()
-                            time.sleep(2)
                         elif profile_choice == '7':
-                            print("Rectangle profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_rectangle()
-                            time.sleep(2)
                         elif profile_choice == '8':
-                            print("Hollow Rectangle profile selected.")
                             Ix, shape, c, b, y_array = moi_solver.inertia_moment_hollow_rectangle()
-                            time.sleep(2)
                         else:
                             print_error("Invalid choice! Please try again.")
-                    elif sub_choice == '3':  # View Current Profile
-                        try:
-                            print("")
-                            print(f"{shape} profile is selected")
-                            print("Current Profile Details:")
-                            print("")
-                            print(colored(f"Calculated Ix for {shape} Profile is: {Ix:.6e} m^4", 'green'))
-                            print("----------------------------------------------------------------------")
-                            input("Press Enter to return to the Profile Definition menu...")
-                        except Exception as e:
-                            print_error(f"No profile defined yet! {e}")
-                            time.sleep(2)
-                            continue
+                        profile_loaded = True
+                        time.sleep(2)
+                elif sub_choice == '3':
+                    try:
+                        print(f"\nCurrent Profile: {shape}")
+                        print(colored(f"Ix = {Ix:.6e} m⁴", "green"))
+                        input("Press Enter to return to the menu...")
+                    except Exception:
+                        print_error("No profile defined yet!")
+                        time.sleep(2)
+
         elif selection == '3':  # Material Selection
             while True:
                 sub_choice = material_selection_menu()
                 if sub_choice == '3':
                     break
-                else:
-                    if sub_choice == '1':
+                elif sub_choice == '1':
+                    if material_loaded:
+                        print(colored("Material was loaded from saved project. Skipping selection.", "yellow"))
+                        time.sleep(1)
+                    else:
                         selected_material = select_material()
                         if selected_material:
                             density = float(selected_material["Density"])
-                            yield_strength = float(selected_material["Yield Strength"] * 1e6)  # Mpa -> Pa
-                            ultimate_strength = float(selected_material["Ultimate Strength"] * 1e6)  # Mpa -> Pa
-                            elastic_modulus = float(selected_material["Elastic Modulus"] * 1e9)  # GPa -> Pa
+                            yield_strength = float(selected_material["Yield Strength"]) * 1e6
+                            ultimate_strength = float(selected_material["Ultimate Strength"]) * 1e6
+                            elastic_modulus = float(selected_material["Elastic Modulus"]) * 1e9
                             poisson_ratio = float(selected_material["Poisson Ratio"])
-                            shear_yield_strength = float(0.55 * yield_strength)  # Pa
+                            shear_yield_strength = 0.55 * yield_strength
+                            material_loaded = True
                             time.sleep(1)
-                    elif sub_choice == '2':
-                        try:
-                            print("Current Material Details:")
-                            print("")
-                            print(f"Material Name: {selected_material['Material']}")
-                            print(f"Density: {density} kg/m³")
-                            print(f"Yield Strength: {yield_strength} Pa")
-                            print(f"Ultimate Strength: {ultimate_strength} Pa")
-                            print(f"Elastic Modulus: {elastic_modulus} Pa")
-                            print(f"Poisson Ratio: {poisson_ratio}")
-                            print(f"Shear Yield Strength: {shear_yield_strength} Pa")
-                        except Exception as e:
-                            print_error("No material selected yet!")
-                        print("")
+                elif sub_choice == '2':
+                    try:
+                        print(f"\nMaterial: {selected_material['Material']}")
+                        print(f"Density: {density} kg/m³")
+                        print(f"Yield Strength: {yield_strength} Pa")
+                        print(f"Ultimate Strength: {ultimate_strength} Pa")
+                        print(f"Elastic Modulus: {elastic_modulus} Pa")
+                        print(f"Poisson Ratio: {poisson_ratio}")
+                        print(f"Shear Yield Strength: {shear_yield_strength} Pa\n")
                         input("Press Enter to return to the Material Selection menu...")
-                    else:
-                        print_error("Invalid selection! Please try again.")
+                    except:
+                        print_error("No material selected yet.")
                         time.sleep(2)
-
 
         elif selection == '4':  # Boundary Conditions
             while True:
                 sub_choice = boundary_conditions_menu()
                 if sub_choice == '3':
                     break
-                else:
-                    if sub_choice == '1':
-                        A, B, A_restraint, B_restraint, A_type, B_type = Beam_Supports()
-                        if A is not None:
-                            print(f"Support A: {A} m, Type: {A_type}")
-                            print(f"Support B: {B} m, Type: {B_type}")
-                        input("Press Enter to return to the Boundary Conditions menu...")
-                        Support_defined = True
-                        support_types = ("pin", "roller")
-                    elif sub_choice == '2':
-                        if not Support_defined:
-                            print_error("No supports defined yet!")
-                            time.sleep(2)
-                        else:
-                            print("Current Support Details:")
-                            print("")
-                            print(f"Support A: {A} m, Type: {A_type}, Restraints: {A_restraint}")
-                            print("")
-                            print(f"Support B: {B} m, Type: {B_type}, Restraints: {B_restraint}")
-                        input("Press Enter to return to the Boundary Conditions menu...")
+                elif sub_choice == '1':
+                    if supports_loaded:
+                        print(colored("Supports were loaded from saved project. Skipping input.", "yellow"))
+                        time.sleep(1)
                     else:
-                        print_error("Invalid selection! Please try again.")
+                        A, B, A_restraint, B_restraint, A_type, B_type = Beam_Supports()
+                        supports_loaded = True
+                        support_types = ("pin", "roller")
+                        print(f"Support A: {A} m, Type: {A_type}")
+                        print(f"Support B: {B} m, Type: {B_type}")
+                        input("Press Enter to return to the menu...")
+                elif sub_choice == '2':
+                    if not supports_loaded:
+                        print_error("No supports defined yet!")
                         time.sleep(2)
+                    else:
+                        print(f"\nSupport A: {A} m, Type: {A_type}, Restraints: {A_restraint}")
+                        print(f"Support B: {B} m, Type: {B_type}, Restraints: {B_restraint}\n")
+                        input("Press Enter to return to the menu...")
 
         elif selection == '5':  # Loads Definition
             while True:
                 sub_choice = loads_definition_menu()
                 if sub_choice == '4':
                     break
-                else:
-                    if sub_choice == '1':
+                elif sub_choice == '1':
+                    if loads_loaded:
+                        print(colored("Loads were loaded from saved project. Skipping input.", "yellow"))
+                        time.sleep(1)
+                    else:
                         print("Define Loads:")
                         loads_dict = manage_loads()
-                        # Extract load lists for later use with the solver:
                         pointloads = loads_dict["pointloads"]
                         distributedloads = loads_dict["distributedloads"]
                         momentloads = loads_dict["momentloads"]
                         triangleloads = loads_dict["triangleloads"]
                         loads = Plotting.format_loads_for_plotting(loads_dict)
+                        loads_loaded = True
                         print("Loads defined successfully!")
                         time.sleep(2)
-
-                    elif sub_choice == '2':
-                        try:
-                            print("Current Loads:")
-                            print("")
-                            print(f"Point Loads: {pointloads}")
-                            print(f"Distributed Loads: {distributedloads}")
-                            print(f"Moment Loads: {momentloads}")
-                            print(f"Triangular Loads: {triangleloads}")
-                        except Exception as e:
-                            print_error("No loads defined yet!")
-                            time.sleep(2)
-                            continue
-                        input("Press Enter to return to the Loads Definition menu...")
-
-                    elif sub_choice == '3':
-                        try:
-                            print("Beam Schematic with Loads:")
-                            beam_plot.plot_beam_schematic(beam_length, A, B, support_types, loads)
-                        except Exception as e:
-                            print_error(f"Error plotting beam schematic: {e}")
-                            time.sleep(2)
-                            continue
+                elif sub_choice == '2':
+                    if not loads_loaded:
+                        print_error("No loads defined yet!")
+                        time.sleep(2)
+                    else:
+                        print(f"\nPoint Loads: {pointloads}")
+                        print(f"Distributed Loads: {distributedloads}")
+                        print(f"Moment Loads: {momentloads}")
+                        print(f"Triangular Loads: {triangleloads}\n")
+                        input("Press Enter to return to the menu...")
+                elif sub_choice == '3':
+                    try:
+                        beam_plot.plot_beam_schematic(beam_length, A, B, support_types, loads)
+                    except Exception as e:
+                        print_error(f"Error plotting schematic: {e}")
+                        time.sleep(2)
+                        continue
                     else:
                         print_error("Invalid selection! Please try again.")
                         time.sleep(2)
-
         elif selection == '6':  # Show Beam Schematic (Standalone)
             try:
                 beam_plot.plot_beam_schematic(beam_length, A, B, support_types, loads)
@@ -756,8 +753,7 @@ def run_extended_menu():
                         save_decision = input(colored("Do you want to save this solved beam? (Y/N) ➔ ", 'cyan'))
                         print("")
                         if save_decision.lower() == 'y':
-                            # Save extended parameters including loads, profile, and material data
-                            load_projects_from_disk()
+                            # Save extended parameters including loads, profile, and material data.
                             save_project(beam_length, A, B, A_restraint, B_restraint,
                                          X_Field, Total_ShearForce, Total_BendingMoment, Reactions,
                                          A_type, B_type,
@@ -765,8 +761,6 @@ def run_extended_menu():
                                          profile_data={'Ix': Ix, 'shape': shape, 'c': c, 'b': b} if 'Ix' in locals() else {},
                                          material_data={'material': selected_material} if 'selected_material' in locals() else {})
                             save_projects_to_disk()
-                           
-
                             break
                         else:
                             print(colored("Beam not saved. Continuing...", 'yellow'))
@@ -777,6 +771,13 @@ def run_extended_menu():
         else:
             print_error("Invalid selection! Please try again.")
             time.sleep(1)
+
+
+
+        # Keep your Analysis and Postprocessing menus unchanged if not needed for flag-checks
+
+
+
 
 
 
