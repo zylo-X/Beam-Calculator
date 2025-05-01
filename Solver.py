@@ -1,21 +1,8 @@
-﻿# solvers.py
+﻿# Solver.py
 # --------------------------------------------------------------------------------
 #           Libraries
 # --------------------------------------------------------------------------------
-
 import numpy as np
-
-# --------------------------------------------------------------------------------
-#         Hard-Coded Load Definitions (Testing Values - Later Will be User Inputs)
-# --------------------------------------------------------------------------------
-
-# Remove or comment these out:
-# pointloads = np.array([...])
-# distributedloads = np.array([...])
-# Triangleloads = np.empty((0,4))
-# momentloads = np.array([...])
-
-# Also remove the Test_XXX flags that rely on these globals.
 
 # --------------------------------------------------------------------------------
 #         Solver Initialization Functions

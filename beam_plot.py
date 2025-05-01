@@ -53,8 +53,8 @@ def plot_reaction_diagram(A, B, reactions,support_types):
     fig.add_trace(ph.draw_support(B, support_types[1]))
 
     fig.update_layout(
-        width=800,
-        height=400,
+        width=1000,
+        height=600,
         title=dict(text="Support Reaction Diagram", x=0.4),
         xaxis=dict(title="Beam Length (m)", range=[-0.5, B + 0.5]),
         yaxis=dict(title="", range=[-2, 2], showgrid=False, zeroline=False, showticklabels=False),  # Removed Y-axis numbers

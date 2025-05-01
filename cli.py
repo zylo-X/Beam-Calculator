@@ -1,81 +1,201 @@
-﻿# cli.py
-
-from calendar import c
-from termcolor import colored,cprint
+﻿#!/usr/bin/env python3
+"""
+CLI for Zylo-X Beam Calculator
+===================================
+This script provides a command-line interface (CLI) for the Zylo-X Beam Calculator.
+It handles project management, profile and material selection, boundary conditions,
+load definitions, analysis, postprocessing, and project save/load functionalities.
+"""
+# modules
 import json
 import numpy as np
-import os
-import time     
-# Import application modules
-from Materials_database import MaterialDatabase  # Import the MaterialDatabase class
+import time
+from termcolor import colored, cprint
+
+# Application modules
+from Materials_database import MaterialDatabase  # Import MaterialDatabase class
 import Solver
-import Plotting
 import moi_solver
+import Plotting
 import beam_plot
-# ================================
-# Global Storage
-# ================================
-beam_storage = []      # List to hold all projects
-current_project = None # Dictionary to hold the currently loaded project
-Materials = None # Placeholder for the materials database object
-# ================================
-# Startup Menu Functions
-# ================================
-# ----------------------------------------------------------------
-# Sub-Menu: Project Management
-# ----------------------------------------------------------------
-def project_management_menu():
-    clear_screen()
-    print_title("_________ Project Management _________")
-    print_option("1 - New Project")
-    print_option("2 - Load Project")
-    print_option("3 - Delete Project")
-    print_option("4 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-# ----------------------------------------------------------------
+from Stress_solver import (calculate_beam_deflection,first_moment_of_area_rect, calculate_shear_stress,calculate_bending_stress,Factor_of_Safety)
+from Menus import (main_menu_template,project_management_menu,profile_definition_menu,choose_profile,
+material_selection_menu,boundary_conditions_menu,loads_definition_menu,analysis_simulation_menu,postprocessing_menu,
+print_success,print_error,print_option,print_title)
+from inputs import Beam_Length,Beam_Supports,manage_loads
+
+# -----------------------------
+# Global Storage Variables
+# -----------------------------
+beam_storage = []      # List to hold all saved projects
+current_project = None # Dictionary holding the currently loaded project
+Materials = None       # Placeholder for the materials database object
+beam_length = 0.0
+A = 0.0
+B = 0.0
+A_restraint = []
+B_restraint = []
+A_type = ""
+B_type = ""
+X_Field = np.array([])
+Total_ShearForce = np.array([])
+Total_BendingMoment = np.array([])
+Reactions = np.array([])
+loads = {}
+selected_material = ''
+Ix = 0.0
+shape = ""
+c = 0.0
+b = 0.0
+y_array = np.array([])
+# -----------------------------
+
+# =============================
+# Project Management Functions
+# =============================
 def New_Project():
+    """Start a new project by resetting the current project."""
     global current_project
-    # Start a new project
-    current_project = None  # New empty project
+    current_project = None  # Reset current project data
     print_success("Starting a new project...")
-    time.sleep(2)   # Pause for 2 second
-            
+    time.sleep(0.5)
+# =============================
 def load_project():
-    global current_project
-    # Load an existing project
+    global current_project, beam_length, A, B, A_restraint, B_restraint, A_type, B_type
+    global X_Field, Total_ShearForce, Total_BendingMoment, Reactions, loads
+    global Ix, shape, c, b, y_array
+    global elastic_modulus, selected_material, density, yield_strength, ultimate_strength, poisson_ratio, shear_yield_strength
+    global pointloads, distributedloads, momentloads, triangleloads
+
     load_projects_from_disk()
 
     if not beam_storage:
-        print_error("No saved projects available! Starting new project instead.")
+        print_error("No saved projects available! Starting a new project instead.")
         current_project = None
-        time.sleep(2)   # Pause for 2 second
-    else:
-        print(colored("\nAvailable Projects:", 'yellow'))
-        for idx, proj in enumerate(beam_storage):
-            print(f" {idx+1}) {proj['name']}")
+        time.sleep(2)
+        return
+
+    print(colored("\nAvailable Projects:", 'yellow'))
+    for idx, proj in enumerate(beam_storage):
+        print(f" {idx+1}) {proj['name']}")
+    print("")
+
+    try:
+        proj_choice = int(input(colored("Enter the number of the project you want to load ➔ ", 'cyan')))
+        current_project = beam_storage[proj_choice - 1]
+        print_success(f"Project '{current_project['name']}' loaded successfully!")
+        time.sleep(1)
+
+        # 🧠 Apply loaded project data to current state
+        beam_length = current_project.get('beam_length', 0)
+        A = current_project.get('support_A_pos', 0)
+        B = current_project.get('support_B_pos', 0)
+        A_restraint = current_project.get('support_A_restraint', [])
+        B_restraint = current_project.get('support_B_restraint', [])
+        A_type = current_project.get('support_A_type', '')
+        B_type = current_project.get('support_B_type', '')
+
+        X_Field = np.array(current_project.get('X_Field', []))
+        Total_ShearForce = np.array(current_project.get('Total_ShearForce', []))
+        Total_BendingMoment = np.array(current_project.get('Total_BendingMoment', []))
+        Reactions = np.array(current_project.get('Reactions', []))
+        loads = current_project.get('loads', {})
+
+        # Load and reassign load components for analysis use
+        pointloads = loads.get("pointloads", [])
+        distributedloads = loads.get("distributedloads", [])
+        momentloads = loads.get("momentloads", [])
+        triangleloads = loads.get("triangleloads", [])
+
+        profile_data = current_project.get('profile', {})
+        Ix = profile_data.get('Ix', 0)
+        shape = profile_data.get('shape', '')
+        c = profile_data.get('c', 0)
+        b = profile_data.get('b', 0)
+        y_array = np.array(profile_data.get('y_array', []))
+
+        material_data = current_project.get('material', {}).get('material', {})
+        if material_data:
+            selected_material = material_data
+            density = float(material_data.get("Density", 0))
+            yield_strength = float(material_data.get("Yield Strength", 0)) * 1e6
+            ultimate_strength = float(material_data.get("Ultimate Strength", 0)) * 1e6
+            elastic_modulus = float(material_data.get("Elastic Modulus", 0)) * 1e9
+            poisson_ratio = float(material_data.get("Poisson Ratio", 0))
+            shear_yield_strength = 0.55 * yield_strength
+        else:
+            selected_material = None
+
+        # ✅ Optional: Show confirmation summary
+        print(colored(f"\n✔ Loaded Project Summary:", 'green'))
+        print(f"Beam Length: {beam_length} m")
+        print(f"Supports: A @ {A} m ({A_type}), B @ {B} m ({B_type})")
+        print(f"Profile: {shape} | Ix = {Ix:.2e} m⁴")
+        if selected_material:
+            print(f"Material: {selected_material.get('Material')} | E = {elastic_modulus:.2e} Pa")
         print("")
-        try:
-            proj_choice = int(input(colored("Enter the number of the project you want to load ➔ ", 'cyan')))
-            current_project = beam_storage[proj_choice - 1]
-            print_success(f"Project '{current_project['name']}' loaded successfully!")
-            time.sleep(2)   # Pause for 2 second
-        except (IndexError, ValueError):
-            print_error("Invalid choice! Starting new project instead.")
-            current_project = None
-            time.sleep(2)   # Pause for 2 second
 
+    except (IndexError, ValueError):
+        print_error("Invalid choice! Starting a new project instead.")
+        current_project = None
+        time.sleep(1)
 
+# ====================================
+def apply_loaded_project():
+    global beam_length, A, B, A_restraint, B_restraint, A_type, B_type
+    global Ix, shape, c, b, y_array
+    global elastic_modulus, selected_material, density, yield_strength, ultimate_strength, poisson_ratio, shear_yield_strength
+    global X_Field, Total_ShearForce, Total_BendingMoment, Reactions, loads
+    global pointloads, distributedloads, momentloads, triangleloads
+
+    if current_project is None:
+        return
+
+    # Point to correct current values from loaded project
+    beam_length = current_project.get('beam_length', 0)
+    A = current_project.get('support_A_pos', 0)
+    B = current_project.get('support_B_pos', 0)
+    A_restraint = current_project.get('support_A_restraint', [])
+    B_restraint = current_project.get('support_B_restraint', [])
+    A_type = current_project.get('support_A_type', '')
+    B_type = current_project.get('support_B_type', '')
+    
+    profile = current_project.get('profile', {})
+    Ix = profile.get('Ix', 0)
+    shape = profile.get('shape', '')
+    c = profile.get('c', 0)
+    b = profile.get('b', 0)
+    y_array = np.array(profile.get('y_array', []))
+
+    material_data = current_project.get('material', {}).get('material', {})
+    if material_data:
+        selected_material = material_data
+        density = float(material_data.get("Density", 0))
+        yield_strength = float(material_data.get("Yield Strength", 0)) * 1e6
+        ultimate_strength = float(material_data.get("Ultimate Strength", 0)) * 1e6
+        elastic_modulus = float(material_data.get("Elastic Modulus", 0)) * 1e9
+        poisson_ratio = float(material_data.get("Poisson Ratio", 0))
+        shear_yield_strength = 0.55 * yield_strength
+
+    loads = current_project.get('loads', {})
+    # If needed, rebuild internal load structures from `loads`
+    pointloads = loads.get("pointloads", [])
+    distributedloads = loads.get("distributedloads", [])
+    momentloads = loads.get("momentloads", [])
+    triangleloads = loads.get("triangleloads", [])
+
+    X_Field = np.array(current_project.get('X_Field', []))
+    Total_ShearForce = np.array(current_project.get('Total_ShearForce', []))
+    Total_BendingMoment = np.array(current_project.get('Total_BendingMoment', []))
+    Reactions = np.array(current_project.get('Reactions', []))
+
+# =============================
 def delete_project():
     """
-    Delete an existing project from global storage and update the JSON file.
-    After performing the deletion (or cancellation), the user will be prompted to
-    return to the Project Management menu.
+    Delete an existing project from storage.
+    Lists the projects, asks for confirmation, and updates the JSON file.
     """
     global beam_storage
-
-    # Load the latest projects from disk
     load_projects_from_disk()
     
     if not beam_storage:
@@ -83,14 +203,11 @@ def delete_project():
         input("Press Enter to return to the Project Management menu...")
         return
 
-    # List available projects
     print_title("Delete Project")
     print_option("Select a project to delete:")
-    
     for idx, project in enumerate(beam_storage):
-        print_option(f"  {idx + 1}. {project['name']}")
-    
-    print("")  # Blank line for spacing
+        print_option(f"  {idx+1}. {project['name']}")
+    print("")
     
     try:
         selection = int(input(colored("Enter the project number you want to delete ➔ ", 'cyan')))
@@ -99,245 +216,54 @@ def delete_project():
             input("Press Enter to return to the Project Management menu...")
             return
         
-        # Retrieve the selected project and confirm deletion
         project_to_delete = beam_storage[selection - 1]
         confirmation = input(colored(f"Are you sure you want to delete project '{project_to_delete['name']}'? (Y/N): ", 'cyan'))
-        
         if confirmation.lower() == 'y':
-            # Remove the project from storage
             del beam_storage[selection - 1]
-            
-            # Write the updated list back to the JSON file
-            with open('beam_projects.json', 'w') as file:
-                json.dump(beam_storage, file)
-            
-            print_success(f"Project '{project_to_delete['name']}' deleted successfully!")
+            try:
+                with open('beam_projects.json', 'w') as file:
+                    json.dump(beam_storage, file, indent=4)
+                print_success(f"Project '{project_to_delete['name']}' deleted successfully!")
+            except Exception as e:
+                print_error(f"Error saving updated project file: {e}")
         else:
             print("Deletion cancelled.")
-    
     except ValueError:
         print_error("Invalid input! Please enter a valid number.")
 
     print("")
     input("Press Enter to return to the Project Management menu...")
-# ----------------------------------------------------------------
-# Sub-Menu: Profile Definition
-# ----------------------------------------------------------------
-def profile_definition_menu():
-    clear_screen()
-    print_title("_________ Profile Definition _________")
-    print_option("1 - Enter Beam Length (m)")
-    print_option("2 - Define Profile")
-    print_option("3 - View Current Profile")
-    print_option("4 - Return to Main Menu")
-    print("")       
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-# ----------------------------------------------------------------
-def choose_profile():
+# =============================
+# Save/Load Project Functions (To Disk)
+# =============================
+def safe_serialize(obj):
     """
-    Display the available profile options in a neat style and prompt
-    the user to select their preferred profile by number.
+    Convert non-JSON serializable objects to JSON-friendly types.
+    
+    Args:
+        obj: Any object (e.g., numpy array, tuple).
     
     Returns:
-        profile_choice (str): The number representing the chosen profile.
+        A list if object is numpy.ndarray or tuple; otherwise, returns object as is.
     """
-    print_title("Available Profiles")
-    print_option("1 - I-beam")
-    print_option("2 - T-beam")
-    print_option("3 - Solid Circle")
-    print_option("4 - Hollow Circle")
-    print_option("5 - Square")
-    print_option("6 - Hollow Square")
-    print_option("7 - Rectangle")
-    print_option("8 - Hollow Rectangle")
-    print("")  # Blank line for spacing
-    profile_choice = input(colored("Enter your preferred profile number ➔ ", 'cyan'))
-    return profile_choice
-# ----------------------------------------------------------------
-# Sub-Menu: Material Selection
-# ----------------------------------------------------------------
-def material_selection_menu():
-    load_material_database()
-    clear_screen()
-    print_title("_________ Material Selection _________")
-    print_option("1 - Select Material")
-    print_option("2 - View Current Material Details")
-    print_option("3 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-# ----------------------------------------------------------------
-def load_material_database():
-    """
-    Initialize and load the material database, storing it in the global variable 'Materials'.
-    """
-    global Materials
-    json_filename = "Materials.json" 
-    try:
-        Materials = MaterialDatabase(json_filename)
-    except Exception as e:
-        print_error(f"Error loading the materials database: {e}")
-        time.sleep(3)   # Pause for 1 second
-# ----------------------------------------------------------------
-def select_material():
-    """
-    Print all materials from the loaded Materials database in one-line format
-    and allow the user to select one by entering the corresponding number.
-    
-    Returns:
-        dict: The selected material dictionary, or None if invalid input.
-    """
-    global Materials
-    if Materials is None:
-        print_error("Materials database is not loaded!")
-        return None
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, tuple):
+        return list(obj)
+    return obj
 
-    # Get the full materials list from the database.
-    materials_list = Materials.materials
-    print_title("Select a Material")
-    cprint("-------------------------------------------------------------------------------------------------------------","red")
-    cprint("Density (kg/m³), Yield Strength (MPa), Ultimate Strength (MPa), Elastic Modulus (GPa), Poisson Ratio","white")
-    cprint("-------------------------------------------------------------------------------------------------------------","red")
-    print("")  # Blank line for spacing
-    for index, material in enumerate(materials_list):
-        properties_line = ", ".join(
-        [f"{key}: {value}" for key, value in material.items() if key != "Material"]
-        )
-        # Print index, material name, and its properties all in one line.
-        print(colored(f"{index + 1} - {material['Material']}","light_yellow"))  
-        print(colored(f"{properties_line}", 'white'))
-        print("")  # Blank line for spacing
-
-    # Prompt the user for selection
-    selection = input(colored("Enter the number of the material you want to select ➔ ", 'cyan'))
-    try:
-        idx = int(selection) - 1
-        if idx < 0 or idx >= len(materials_list):
-            print_error("Invalid selection!")
-            return None
-        selected_material = materials_list[idx]
-        print_success(f"You selected: {selected_material['Material']}")
-        # Extract only the required properties.
-        key_props = {
-            "Material": selected_material.get("Material"),
-            "Density": selected_material.get("Density"),
-            "Yield Strength": selected_material.get("Yield Strength"),
-            "Ultimate Strength": selected_material.get("Ultimate Strength"),
-            "Elastic Modulus": selected_material.get("Elastic Modulus"),
-            "Poisson Ratio": selected_material.get("Poisson Ratio"),
-        }
-
-        return key_props
-
-    except ValueError:
-        print_error("Invalid input. Please enter a valid number.")
-        return None
-# ----------------------------------------------------------------
-# Sub-Menu: Boundary Conditions
-# ----------------------------------------------------------------
-def boundary_conditions_menu():
-    clear_screen()
-    print_title("_________ Boundary Conditions _________")
-    print_option("1 - Define Supports")
-    print_option("2 - View Supports")
-    print_option("3 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-
-# ----------------------------------------------------------------
-# Sub-Menu: Loads Definition
-# ----------------------------------------------------------------
-def loads_definition_menu():
-    clear_screen()
-    print_title("_________ Loads Definition _________")
-    print_option("1 - Define Loads")
-    print_option("2 - View Loads")
-    print_option("3 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-
-# ----------------------------------------------------------------
-# Sub-Menu: Analysis/Simulation
-# ----------------------------------------------------------------
-def analysis_simulation_menu():
-    clear_screen()
-    print_title("_________ Analysis/Simulation _________")
-    print_option("1 - Solve Beam")
-    print_option("2 - View Analysis Results")
-    print_option("3 - Calculate Stress and F.O.S")
-    print_option("4 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-#__________________________________________________________
-
-def first_moment_of_area_rect(b, y_array):
-    """
-    b: Width of the section (m)
-    y: Vertical distance from neutral axis to point of interest (m)
-    Returns Q in m^3
-    """
-    Q_array = b * np.abs(y_array) * (np.abs(y_array) / 2)
-    return Q_array
-
-def calculate_shear_stress(Total_ShearForce, Q_array, Ix, b):
-    """
-    V: Shear force at point (N)
-    Q: First moment of area above/below point (m^3)
-    I: Moment of inertia (m^4)
-    b: Width of the section at point (m)
-    Returns shear stress (Pa)
-    """
-    tau_array = Total_ShearForce * Q_array / (Ix * b)
-    return tau_array
-
-
-def calculate_bending_stress(M, c, Ix):
-    """
-    M: Bending moment (N·m)
-    c: Distance from neutral axis to outermost fiber (m)
-    Ix: Moment of inertia (m^4)
-    Returns bending stress (Pa)
-    """
-    sigma = M * c / Ix
-    return sigma
-
-def calculate_FOS(yield_strength, sigma):
-    """
-    yield_strength: Yield strength of the material (MPa)
-    sigma: Bending stress (Pa)
-    Returns Factor of Safety (FOS)
-    """
-    FOS = yield_strength / sigma
-    return FOS
-
-def Factor_of_Safety(Total_BendingMoment, c,yield_strength,Ix):
-
-    M_max_kNm = np.max(np.abs(Total_BendingMoment))
-    M_max = M_max_kNm * 1000    # Convert to N·m
-    sigma_Pa = calculate_bending_stress(M_max, c, Ix)
-    sigma_MPa = sigma_Pa / 1e6  # Convert to MPa if desired
-    yield_strength_MPa = yield_strength
-    FOS = calculate_FOS(yield_strength_MPa, sigma_MPa)
-    print(f"Maximum bending moment (N·m): {M_max:.2f}")
-    print(f"Bending stress (MPa): {sigma_MPa:.2f}")
-    print(f"Factor of Safety: {FOS:.2f}")
-
-# ================================
-# Data Saving and Loading Functions
-# ================================
 
 def save_project(beam_length, A, B, A_restraint, B_restraint,
-                 X_Field, Total_ShearForce, Total_BendingMoment, Reactions,A_type,B_type):
+                 X_Field, Total_ShearForce, Total_BendingMoment, Reactions,
+                 A_type, B_type,
+                 loads_dict=loads,
+                 profile_data={'Ix': Ix, 'shape': shape, 'c': c, 'b': b, 'y_array': safe_serialize(y_array)},
+                 material_data={'material': selected_material}):
     """
-    Save the current project data.
+    Save or update a project in memory, and persist later to disk.
     """
     global beam_storage, current_project
-
-    project_name = input(colored("Enter a name for this project ➔ ", 'cyan'))
+    project_name = input(colored("Enter a name for this project ➔ ", 'cyan')).strip()
 
     project_data = {
         'name': project_name,
@@ -351,46 +277,51 @@ def save_project(beam_length, A, B, A_restraint, B_restraint,
         'X_Field': safe_serialize(X_Field),
         'Total_ShearForce': safe_serialize(Total_ShearForce),
         'Total_BendingMoment': safe_serialize(Total_BendingMoment),
-        'Reactions': safe_serialize(Reactions)
+        'Reactions': safe_serialize(Reactions),
+        'loads': loads_dict if loads_dict is not None else {},
+        'profile': profile_data if profile_data is not None else {},
+        'material': material_data if material_data is not None else {}
     }
 
-    beam_storage.append(project_data)
-    print_success(f"Project '{project_name}' saved successfully! 📂")
-    print("")
-
-
-def safe_serialize(obj):
-    """
-    Convert non-JSON serializable objects (like numpy arrays) to lists.
-    """
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, tuple):
-        return list(obj)
+    # Update existing project if name matches
+    for idx, proj in enumerate(beam_storage):
+        if proj['name'].lower() == project_name.lower():
+            beam_storage[idx] = project_data
+            print_success(f"Project '{project_name}' updated successfully!")
+            break
     else:
-        return obj
+        beam_storage.append(project_data)
+        print_success(f"Project '{project_name}' saved successfully!")
+
+    current_project = project_data
+    print("")
 
 
 def save_projects_to_disk():
     """
-    Save all projects from global storage to disk in JSON format.
+    Save all global projects to disk as a JSON file.
+    Uses indentation for human readability.
     """
     global beam_storage
-    with open('beam_projects.json', 'w') as file:
-        json.dump(beam_storage, file)
-    print_success("All projects saved to disk successfully! 📂")
+    try:
+        with open('beam_projects.json', 'w') as file:
+            json.dump(beam_storage, file, indent=4)
+        print_success("All projects saved to disk successfully!")
+    except Exception as e:
+        print_error(f"Error saving projects to disk: {e}")
     print("")
 
 
 def load_projects_from_disk():
     """
-    Load projects from the JSON file into global storage.
+    Load projects from the JSON file into the global beam_storage.
+    Initializes an empty storage if the file is not found or an error occurs.
     """
     global beam_storage
     try:
         with open('beam_projects.json', 'r') as file:
             beam_storage = json.load(file)
-        print_success("Projects loaded from disk successfully! 📂")
+        print_success("Projects loaded from disk successfully!")
     except FileNotFoundError:
         print_error("No saved project file found. Starting with empty storage.")
         beam_storage = []
@@ -399,277 +330,97 @@ def load_projects_from_disk():
         beam_storage = []
 
 
-# ================================
-# Printing Helper Functions
-# ================================
-
-def print_title(title):
+# =============================
+# Material Database Functions
+# =============================
+def load_material_database():
     """
-    Print a formatted title.
+    Load the material database from 'Materials.json' into the global variable.
     """
-    print(colored(f"\n=== {title} ===\n", 'cyan', attrs=['bold']))
-
-
-def print_option(option):
+    global Materials
+    json_filename = "Materials.json"
+    try:
+        Materials = MaterialDatabase(json_filename)
+    except Exception as e:
+        print_error(f"Error loading the materials database: {e}")
+        time.sleep(3)
+# =============================
+def select_material():
     """
-    Print a formatted option.
-    """
-    print(colored(option, 'yellow'))
-
-
-def print_error(error_msg):
-    """
-    Print an error message.
-    """
-    print(colored(error_msg, 'red', attrs=['bold']))
-
-
-def print_success(msg):
-    """
-    Print a success message.
-    """
-    print(colored(msg, 'green'))
-
-
-def main_menu():
-    """
-    Display the main menu and return the user's choice.
-    """
-    print_title("Welcome to Zylo-X Beam Calculator 🏗️")
-    print_option("1) Solve Simple Beam (Reactions, SFD, BMD)")
-    print_option("2) Plot Diagrams (Matplotlib / Plotly)")
-    print_option("3) Calculate Moment of Inertia (MOI)")
-    print_option("0) Exit")
-    print("")
-    choice = input(colored("Enter your choice ➔ ", 'cyan'))
-    return choice
-
-
-# ================================
-# Input Data Functions
-# ================================
-
-def Beam_Length():
-    """
-    Prompt the user to enter the beam length.
-    """
-    beam_length = float(input(colored("Enter Beam Length (meters): ➔ ", 'cyan')))
-    if beam_length <= 0:
-        raise ValueError("Beam length must be positive.")
-    print("")
-    return beam_length
-
-
-def Beam_Supports():
-    """
-    Prompt the user to enter the positions and types of supports.
-    """
-    A = float(input(colored("Enter Position of Support A (meters): ➔ ", 'cyan')))
-    print(colored("Choose Support A Type:", 'yellow'))
-    print(colored("  1) Pin Support", 'yellow'))
-    print(colored("  2) Roller Support", 'yellow'))
-    A_type_choice = input(colored("Enter your choice (1 or 2) ➔ ", 'cyan'))
-    A_type = ""
-    B_type = ""
-    if A_type_choice == '1':
-        A_restraint = (1, 1, 0)
-        A_type ="Pin Support" 
-    else :
-        A_restraint = (0, 1, 0)
-        A_type ="Roller Support" 
-     
-    B = float(input(colored("Enter Position of Support B (meters): ➔ ", 'cyan')))
-    print(colored("Choose Support B Type:", 'yellow'))
-    print(colored("  1) Pin Support", 'yellow'))
-    print(colored("  2) Roller Support", 'yellow'))
-    B_type_choice = input(colored("Enter your choice (1 or 2) ➔ ", 'cyan'))
-    if B_type_choice == '1':
-        B_restraint = (1, 1, 0)
-        B_type ="Pin Support" 
-    else :
-        B_restraint = (0, 1, 0)
-        B_type ="Roller Support" 
-
-    if A <= 0 or B <= 0:
-        raise ValueError("Support positions must be positive.")
-    if A >= B:
-        raise ValueError("Support A must be to the left of Support B.")
+    List all materials from the loaded database, prompt for a selection,
+    and return key properties of the selected material.
     
+    Returns:
+        dict: Selected material properties or None if input is invalid.
+    """
+    global Materials
+    if Materials is None:
+        print_error("Materials database is not loaded!")
+        return None
+
+    materials_list = Materials.materials
+    print_title("Select a Material")
+    cprint("-------------------------------------------------------------------------------------------------------------", "red")
+    cprint("Density (kg/m³), Yield Strength (MPa), Ultimate Strength (MPa), Elastic Modulus (GPa), Poisson Ratio", "white")
+    cprint("-------------------------------------------------------------------------------------------------------------", "red")
     print("")
-    return A, B, A_restraint, B_restraint, A_type, B_type
+    for index, material in enumerate(materials_list):
+        properties_line = ", ".join([f"{key}: {value}" for key, value in material.items() if key != "Material"])
+        print(colored(f"{index + 1} - {material['Material']}", "light_yellow"))
+        print(colored(f"{properties_line}", 'white'))
+        print("")
+    selection = input(colored("Enter the number of the material you want to select ➔ ", 'cyan'))
+    try:
+        idx = int(selection) - 1
+        if idx < 0 or idx >= len(materials_list):
+            print_error("Invalid selection!")
+            return None
+        selected_material = materials_list[idx]
+        print_success(f"You selected: {selected_material['Material']}")
+        key_props = {
+            "Material": selected_material.get("Material"),
+            "Density": selected_material.get("Density"),
+            "Yield Strength": selected_material.get("Yield Strength"),
+            "Ultimate Strength": selected_material.get("Ultimate Strength"),
+            "Elastic Modulus": selected_material.get("Elastic Modulus"),
+            "Poisson Ratio": selected_material.get("Poisson Ratio"),
+        }
+        return key_props
+    except ValueError:
+        print_error("Invalid input. Please enter a valid number.")
+        return None
 
+# =============================
 
-def get_user_loads():
-    """
-    Prompt the user to input various load types:
-      - Point loads (with sub-types: Vertical, Horizontal, or Angled)
-      - Distributed loads (UDL)
-      - Moment loads
-      - Triangular loads (currently unused)
-      
-    Returns a dictionary with keys:
-      "pointloads", "distributedloads", "momentloads", "triangleloads"
-    """
-    pointload_list = []
-    distributedload_list = []
-    momentload_list = []
-    triangleload_list = []  # Reserved for triangular loads
-
-    # --- Point Loads ---
-    num_point = int(input("How many point loads do you want to input? ➔ "))
-    for i in range(num_point):
-        print(f"\n--- Point Load {i+1} ---")
-        pos = float(input("Enter position (m): ➔ "))
-
-        print(colored("Select Point Load Type:", 'yellow'))
-        print(colored("  1) Vertical Load (Y-direction)", 'yellow'))
-        print(colored("  2) Horizontal Load (X-direction)", 'yellow'))
-        print(colored("  3) Angled Load (Force & Angle)", 'yellow'))
-        load_type = input(colored("Enter your choice (1, 2, or 3) ➔ ", 'cyan'))
-
-        if load_type == '1':  # Vertical load: only Y-force provided
-            y_force = float(input("Enter Y-force (kN): ➔ "))
-            pointload_list.append([pos, 0, y_force])
-        elif load_type == '2':  # Horizontal load: only X-force provided
-            x_force = float(input("Enter X-force (kN): ➔ "))
-            pointload_list.append([pos, x_force, 0])
-        elif load_type == '3':  # Angled load: convert force to components
-            force_mag = float(input("Enter Force magnitude (kN): ➔ "))
-            angle = float(input("Enter angle (degrees): ➔ "))
-            x_force = force_mag * np.cos(np.radians(angle))
-            y_force = force_mag * np.sin(np.radians(angle))
-            pointload_list.append([pos, x_force, y_force])
-        else:
-            print_error("Invalid choice! Please enter 1, 2, or 3.")
-            continue
-
-    # --- Distributed Loads (UDL) ---
-    num_udl = int(input("\nHow many UDL loads do you want to input? ➔ "))
-    for i in range(num_udl):
-        print(f"\n--- UDL {i+1} ---")
-        start = float(input("Enter start position (m): ➔ "))
-        end = float(input("Enter end position (m): ➔ "))
-        intensity = float(input("Enter load intensity (kN/m): ➔ "))
-        distributedload_list.append([start, end, intensity])
-
-    # --- Moment Loads ---
-    num_mom = int(input("\nHow many point moments do you want to input? ➔ "))
-    for i in range(num_mom):
-        print(f"\n--- Moment Load {i+1} ---")
-        pos = float(input("Enter position (m): ➔ "))
-        moment = float(input("Enter moment magnitude (kNm): ➔ "))
-        momentload_list.append([pos, moment])
-    
-    # --- Triangular Loads (unused currently) ---
-    triangleload_list = []
-
-    print("")
-    return {
-        "pointloads": pointload_list,
-        "distributedloads": distributedload_list,
-        "momentloads": momentload_list,
-        "triangleloads": triangleload_list
-    }
-
-# ----------------------------------------------------------------
-# Utility Function: Clear the Terminal Screen
-# ----------------------------------------------------------------
-def clear_screen():
-    """
-    Clear the terminal screen.
-    """
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-
-# ----------------------------------------------------------------
-# Extended Main Menu Template
-# ----------------------------------------------------------------
-def main_menu_template():
-    """
-    Display the extended main menu and return the user's selection.
-    """
-    clear_screen()
-    print_title("Main Menu")
-    print_option("1 - Project Management")
-    print_option("2 - Profile Definition")
-    print_option("3 - Material Selection")
-    print_option("4 - Boundary Conditions")
-    print_option("5 - Loads Definition")
-    print_option("6 - Analysis/Simulation")
-    print_option("7 - Postprocessing/Visualization")
-    print_option("8 - Save Project")
-    print("")
-    selection = input(colored("Enter your selection: ➔ ", 'cyan'))
-    return selection
-
-
-# ----------------------------------------------------------------
-# Sub-Menu: Postprocessing/Visualization
-# ----------------------------------------------------------------
-def postprocessing_menu():
-    clear_screen()
-    print_title("_________ Postprocessing/Visualization _________")
-    print_option("1 - SFD/BMD Plots (Matplotlib)")
-    print_option("2 - SFD/BMD Plots (Plotly)")
-    print_option("3 - Stress/F.O.S Contours")
-    print_option("4 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-
-
-# ----------------------------------------------------------------
-# Sub-Menu: Save Project
-# ----------------------------------------------------------------
-def save_project_menu():
-    clear_screen()
-    print_title("_________ Save Project _________")
-    print_option("1 - Save Current Project")
-    print_option("2 - Return to Main Menu")
-    print("")
-    choice = input(colored("Enter your choice: ➔ ", 'cyan'))
-    return choice
-
-
-# ----------------------------------------------------------------
-# Extended Main Menu Runner
-# ----------------------------------------------------------------
 def run_extended_menu():
+    """
+    The main loop to run the extended menu.
+    Coordinates calls to various submenus and functions.
+    """
     global current_project
     load_material_database()
     Support_defined = False
-    """
-    Run the extended main menu. Depending on the user's selection,
-    display the corresponding sub-menu (or a placeholder for future functions).
-    """
     while True:
         selection = main_menu_template()
-        if selection == '1':
-             while True:
-    
+        if selection == '1':  # Project Management
+            while True:
                 sub_choice = project_management_menu()
                 if sub_choice == '4':  # Return to main menu
                     break
                 else:
-
-                    # based on the sub_choice
                     if sub_choice == '1':
-                            # Start a new project
-                            New_Project()
-                            break
-
-                    elif sub_choice == '2':
-                        # Load an existing project
-                        load_project()
+                        New_Project()
                         break
-
+                    elif sub_choice == '2':
+                        load_project()
+                        apply_loaded_project()
+                        break
                     elif sub_choice == '3':
                         delete_project()
                     else:
-                     print_error("Invalid selection! Please try again.")
-                     time.sleep(1)   # Pause for 1 second
-
-        elif selection == '2':
+                        print_error("Invalid selection! Please try again.")
+                        time.sleep(1)
+        elif selection == '2':  # Profile Definition
             while True:
                 sub_choice = profile_definition_menu()
                 if sub_choice == '4':  # Return to main menu
@@ -677,54 +428,58 @@ def run_extended_menu():
                 else:
                     if sub_choice == '1':  # Enter Beam Length
                         beam_length = Beam_Length()
-
-                    elif sub_choice == '2':  # Define Profile   b: Width of the section at point (m) - C: Neutral Axis Distance (m)
+                        print(f"Beam Length is set to: {beam_length} m")
+                        time.sleep(2)
+                    elif sub_choice == '2':  # Define Profile
                         profile_choice = choose_profile()
                         if profile_choice == '1':
                             print("I-beam profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_ibeam()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_ibeam()
+                            time.sleep(2)
                         elif profile_choice == '2':
                             print("T-beam profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_tbeam()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_tbeam()
+                            time.sleep(2)
                         elif profile_choice == '3':
                             print("Solid Circle profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_circle()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_circle()
+                            time.sleep(2)
                         elif profile_choice == '4':
                             print("Hollow Circle profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_circle()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_circle()
+                            time.sleep(2)
                         elif profile_choice == '5':
                             print("Square profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_square()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_square()
+                            time.sleep(2)
                         elif profile_choice == '6':
                             print("Hollow Square profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_hollow_square()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_hollow_square()
+                            time.sleep(2)
                         elif profile_choice == '7':
                             print("Rectangle profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_rectangle()
-                            time.sleep(2)   # Pause for 2 second
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_rectangle()
+                            time.sleep(2)
                         elif profile_choice == '8':
                             print("Hollow Rectangle profile selected.")
-                            Ix,shape,c,b,y_array = moi_solver.inertia_moment_hollow_rectangle()
+                            Ix, shape, c, b, y_array = moi_solver.inertia_moment_hollow_rectangle()
                             time.sleep(2)
                         else:
                             print_error("Invalid choice! Please try again.")
-
-                    else:
-                        print("")
-                        print(f'{shape} profile is selected')
-                        print("Current Profile Details: ")
-                        print("")
-                        print(colored(f"Calculated Ix for {shape} Profile is : {Ix:.6e} m^4", 'green'))
-                        print("----------------------------------------------------------------------")
-                        input("Press Enter to return to the Profile Definition menu...")
-                        
-        elif selection == '3':
+                    elif sub_choice == '3':  # View Current Profile
+                        try:
+                            print("")
+                            print(f"{shape} profile is selected")
+                            print("Current Profile Details:")
+                            print("")
+                            print(colored(f"Calculated Ix for {shape} Profile is: {Ix:.6e} m^4", 'green'))
+                            print("----------------------------------------------------------------------")
+                            input("Press Enter to return to the Profile Definition menu...")
+                        except Exception as e:
+                            print_error(f"No profile defined yet! {e}")
+                            time.sleep(2)
+                            continue
+        elif selection == '3':  # Material Selection
             while True:
                 sub_choice = material_selection_menu()
                 if sub_choice == '3':
@@ -734,31 +489,33 @@ def run_extended_menu():
                         selected_material = select_material()
                         if selected_material:
                             density = float(selected_material["Density"])
-                            yield_strength = float(selected_material["Yield Strength"])
-                            ultimate_strength = float(selected_material["Ultimate Strength"])
-                            elastic_modulus = float(selected_material["Elastic Modulus"])
+                            yield_strength = float(selected_material["Yield Strength"] * 1e6)  # Mpa -> Pa
+                            ultimate_strength = float(selected_material["Ultimate Strength"] * 1e6)  # Mpa -> Pa
+                            elastic_modulus = float(selected_material["Elastic Modulus"] * 1e9)  # GPa -> Pa
                             poisson_ratio = float(selected_material["Poisson Ratio"])
-                            shear_yield_strength = float(0.55 * yield_strength)
+                            shear_yield_strength = float(0.55 * yield_strength)  # Pa
                             time.sleep(1)
                     elif sub_choice == '2':
-                        print(f"Current Material Details :")
+                        try:
+                            print("Current Material Details:")
+                            print("")
+                            print(f"Material Name: {selected_material['Material']}")
+                            print(f"Density: {density} kg/m³")
+                            print(f"Yield Strength: {yield_strength} Pa")
+                            print(f"Ultimate Strength: {ultimate_strength} Pa")
+                            print(f"Elastic Modulus: {elastic_modulus} Pa")
+                            print(f"Poisson Ratio: {poisson_ratio}")
+                            print(f"Shear Yield Strength: {shear_yield_strength} Pa")
+                        except Exception as e:
+                            print_error("No material selected yet!")
                         print("")
-                        print(f"Material Name: {selected_material['Material']}")
-                        print(f"The Density is: {density},kg/m³")
-                        print(f"The Yield Strength is: {yield_strength},MPa")
-                        print(f"The Ultimate Strength is: {ultimate_strength},MPa")
-                        print(f"The Elastic Modulus is: {elastic_modulus},GPa")
-                        print(f"The Poisson Ratio is: {poisson_ratio}")
-                        print(f"The Shear Yield Strength is: {shear_yield_strength},MPa")
-                        print("")
-                        print("----------------------------------------------------------------------")
                         input("Press Enter to return to the Material Selection menu...")
-
                     else:
                         print_error("Invalid selection! Please try again.")
                         time.sleep(2)
 
-        elif selection == '4':
+
+        elif selection == '4':  # Boundary Conditions
             while True:
                 sub_choice = boundary_conditions_menu()
                 if sub_choice == '3':
@@ -766,42 +523,42 @@ def run_extended_menu():
                 else:
                     if sub_choice == '1':
                         A, B, A_restraint, B_restraint, A_type, B_type = Beam_Supports()
-                        print(f"Support A: {A} m, Type: {A_type}")
-                        print(f"Support B: {B} m, Type: {B_type}")
-                        print("")
+                        if A is not None:
+                            print(f"Support A: {A} m, Type: {A_type}")
+                            print(f"Support B: {B} m, Type: {B_type}")
                         input("Press Enter to return to the Boundary Conditions menu...")
                         Support_defined = True
+                        support_types = ("pin", "roller")
                     elif sub_choice == '2':
-                        if Support_defined == False:
+                        if not Support_defined:
                             print_error("No supports defined yet!")
                             time.sleep(2)
                         else:
-                            print(f"Current Support Details:")
+                            print("Current Support Details:")
                             print("")
-                            print(f"Support A: {A} m, Type: {A_type},restraint :{A_restraint}")
-                            print(f"Support B: {B} m, Type: {B_type},restraint :{B_restraint}")                            
-                        print("")
+                            print(f"Support A: {A} m, Type: {A_type}, Restraints: {A_restraint}")
+                            print("")
+                            print(f"Support B: {B} m, Type: {B_type}, Restraints: {B_restraint}")
                         input("Press Enter to return to the Boundary Conditions menu...")
-
                     else:
                         print_error("Invalid selection! Please try again.")
                         time.sleep(2)
 
-
-        elif selection == '5':
-            while True:   
+        elif selection == '5':  # Loads Definition
+            while True:
                 sub_choice = loads_definition_menu()
-                if sub_choice == '3':
+                if sub_choice == '4':
                     break
                 else:
-                    if sub_choice== '1':
+                    if sub_choice == '1':
                         print("Define Loads:")
-                        loads_dict = get_user_loads()
-                        # Extract load lists for the solver
+                        loads_dict = manage_loads()
+                        # Extract load lists for later use with the solver:
                         pointloads = loads_dict["pointloads"]
                         distributedloads = loads_dict["distributedloads"]
                         momentloads = loads_dict["momentloads"]
                         triangleloads = loads_dict["triangleloads"]
+                        loads = Plotting.format_loads_for_plotting(loads_dict)
                         print("Loads defined successfully!")
                         time.sleep(2)
 
@@ -812,107 +569,220 @@ def run_extended_menu():
                             print(f"Point Loads: {pointloads}")
                             print(f"Distributed Loads: {distributedloads}")
                             print(f"Moment Loads: {momentloads}")
-                            print(f"Triangle Loads: {triangleloads}")
-                            print("")
-                        except :
+                            print(f"Triangular Loads: {triangleloads}")
+                        except Exception as e:
                             print_error("No loads defined yet!")
                             time.sleep(2)
                             continue
-
                         input("Press Enter to return to the Loads Definition menu...")
+
+                    elif sub_choice == '3':
+                        try:
+                            print("Beam Schematic with Loads:")
+                            beam_plot.plot_beam_schematic(beam_length, A, B, support_types, loads)
+                        except Exception as e:
+                            print_error(f"Error plotting beam schematic: {e}")
+                            time.sleep(2)
+                            continue
                     else:
                         print_error("Invalid selection! Please try again.")
                         time.sleep(2)
 
-        elif selection == '6':
+        elif selection == '6':  # Show Beam Schematic (Standalone)
+            try:
+                beam_plot.plot_beam_schematic(beam_length, A, B, support_types, loads)
+            except Exception as e:
+                print_error(f"Error plotting beam schematic: {e}")
+                time.sleep(2)
+                continue
+
+        elif selection == '7':  # Analysis/Simulation
             while True:
-                
                 sub_choice = analysis_simulation_menu()
-                if sub_choice == '4':
+                if sub_choice == '5':
                     break
                 else:
                     if sub_choice == '1':
-                         print("Solver informations : ")
-                         print("")
-                         print("Beam Length: ", beam_length)
-                         print("Number of Divisions = 10000")
-                         print("Support A Position: ", A)
-                         print("Support B Position: ", B)
-                         print("Support A Type: ", A_type)
-                         print("Support B Type: ", B_type)
-                         print("Point Loads: ", pointloads)
-                         print("Distributed Loads: ", distributedloads)
-                         print("Moment Loads: ", momentloads)
-                         print("Triangle Loads: ", triangleloads)
-                         print("")
-                         cprint("---------------------------------------------------------", 'red')
-                         print("Calculating reactions, shear force, and bending moment...")
-                            # --- Solve the beam problem ---
-                            # Call the solver function with the defined parameters
-                         X_Field, Total_ShearForce, Total_BendingMoment, Reactions = Solver.solve_simple_beam(
-                            beam_length, A, B,
-                            pointloads_in = pointloads,
-                            distributedloads_in = distributedloads,
-                            momentloads_in = momentloads,
-                            triangleloads_in = triangleloads)
-                         # --- Print Calculated Reactions ---
-                         Va = Reactions[0]
-                         Ha = Reactions[1]
-                         Vb = Reactions[2]
-                         max_shear = round(np.max(Total_ShearForce), 3)
-                         min_shear = round(np.min(Total_ShearForce), 3)
-                         max_bending = round(np.max(Total_BendingMoment), 3)
-                         min_bending = round(np.min(Total_BendingMoment), 3)
+                        try:
+                            print("Solver Information:")
+                            print("")
+                            print(f"Beam Length: {beam_length} m")
+                            print("Number of Divisions = 10000")
+                            print(f"Support A Position: {A} m")
+                            print(f"Support B Position: {B} m")
+                            print(f"Support A Type: {A_type}")
+                            print(f"Support B Type: {B_type}")
+                            print(f"Point Loads: {pointloads} (position in m and magnitude in N)")
+                            print(f"Distributed Loads: {distributedloads} (start, end in m and intensity in N/m)")
+                            print(f"Moment Loads: {momentloads} (position in m and moment in N·m)")
+                            print(f"Triangular Loads: {triangleloads} (position and magnitude)")
+                            print("")
+                            cprint("---------------------------------------------------------", 'red')
+                            print("Calculating reactions, shear force, and bending moment...")
+                        except: 
+                            # Handle case where loads are not defined
+                            print_error("No loads defined yet!")
+                            time.sleep(2)
+                            continue
 
-                         print("Beam analysis completed successfully!")
-                         time.sleep(2)
+                        try:
+                            X_Field, Total_ShearForce, Total_BendingMoment, Reactions = Solver.solve_simple_beam(
+                                beam_length, A, B,
+                                pointloads_in=pointloads,
+                                distributedloads_in=distributedloads,
+                                momentloads_in=momentloads,
+                                triangleloads_in=triangleloads)
+                        except Exception as e:
+                            print_error(f"Error solving beam: {e}")
+                            time.sleep(2)
+                            continue
+
+                        Va = Reactions[0]
+                        Ha = Reactions[1]
+                        Vb = Reactions[2]
+                        max_shear = round(np.max(Total_ShearForce), 3)
+                        min_shear = round(np.min(Total_ShearForce), 3)
+                        max_bending = round(np.max(Total_BendingMoment), 3)
+                        min_bending = round(np.min(Total_BendingMoment), 3)
+                        print("Beam analysis completed successfully!")
+                        input("Press Enter to return to the Analysis/Simulation menu...")
 
                     elif sub_choice == '2':
-                        if Reactions is None:
-                            print_error("No analysis results available yet!")
-                            time.sleep(2)
-                        else:
+                        try:
                             print("Analysis Results:")
                             cprint("---------------------------------------------------------", 'red')
                             print("")
-                            print(f"Reactions: Rv-A : {Va}")
-                            print(f"Reactions: Rh-A : {Ha}")
-                            print(f"Reactions: Rv-B : {Vb}")
-                            print(f"Max Shear Force: {max_shear} kN")
-                            print(f"Min Shear Force: {min_shear} kN")
-                            print(f"Max Bending Moment: {max_bending} kNm")
-                            print(f"Min Bending Moment: {min_bending} kNm")
-                            print("")   
-                            print("---------------------------------------------------------")
-                    elif sub_choice =='3':
-                            Q_array=first_moment_of_area_rect(b, y_array)
+                            print(f"Reactions: Rv-A: {Va} N")
+                            print(f"Reactions: Rh-A: {Ha} N")
+                            print(f"Reactions: Rv-B: {Vb} N")
+                            print(f"Max Shear Force: {max_shear} N")
+                            print(f"Min Shear Force: {min_shear} N")
+                            print(f"Max Bending Moment: {max_bending} N·m")
+                            print(f"Min Bending Moment: {min_bending} N·m")
+                            print("")
+                            cprint("---------------------------------------------------------", 'red')
+                        except Exception as e:
+                            print_error("No analysis results available yet!")
+                            time.sleep(2)
+                        input("Press Enter to return to the Analysis/Simulation menu...")
+
+                    elif sub_choice == '4':
+                        try:
+                            Q_array = first_moment_of_area_rect(b, y_array)
                             Total_stress = calculate_shear_stress(Total_ShearForce, Q_array, Ix, b)
                             Max_stress = np.max(Total_stress)
-                        # Calculate Stress and F.O.S
+                            sigma = calculate_bending_stress(Total_BendingMoment, c, Ix)
+                            Max_sigma = np.max(np.abs(sigma))
+                            # Calculate and display Factor of Safety
+                            Factor_of_Safety(Total_BendingMoment, c, yield_strength, Ix)
+                            print("---------------------------------------------------------")
+                            print("")
+                            print("Stress and Factor of Safety calculations completed successfully!")
+                            time.sleep(2)
+                            print("For the shear stress, the maximum value is:", Max_stress, "Pa")
+                            print("For the bending stress, the maximum value is:", Max_sigma, "N/m²")
+                            print("---------------------------------------------------------")
+                        except Exception as e:
+                            print_error(f"Error in stress/F.O.S calculations: {e}")
+                            time.sleep(2)
+                    elif sub_choice == '3':
+                        try:
+                            print("Calculating deflection...")
+                            Deflection,Slope,curv = calculate_beam_deflection(X_Field, Total_BendingMoment, elastic_modulus, Ix)
+                            print("Deflection calculations completed successfully!")
+                            time.sleep(2)
+                        except Exception as e:
+                            print_error(f"Error calculating deflection: {e}")
+                            time.sleep(2)
+        elif selection == '8':  # Postprocessing/Visualization
+            while True:
+                sub_choice = postprocessing_menu()
+                if sub_choice == '6':
+                    break
+                else:
+                    if sub_choice == '1':
+                        try:
+                            print("Reactions Schematic Plots:")
+                            beam_plot.plot_reaction_diagram(A, B, Reactions, support_types)
+                        except Exception as e:
+                            print_error(f"Error plotting reaction diagram: {e}")
+                            time.sleep(2)
+                            continue
+                    elif sub_choice == '2':
+                        try:
+                            print("SFD/BMD Plots (Matplotlib):")
+                            Plotting.Matplot_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment)
+                        except Exception as e:
+                            print_error(f"Error plotting using Matplotlib: {e}")
+                            time.sleep(2)
+                            continue
+                    elif sub_choice == '3':
+                        try:
+                            print("SFD/BMD Plots (Plotly):")
+                            Plotting.Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length)
+                        except Exception as e:
+                            print_error(f"Error plotting using Plotly: {e}")
+                            time.sleep(2)
+                            continue
 
-        elif selection == '7':
-            sub_choice = postprocessing_menu()
-            if sub_choice == '4':
-                continue
-            else:
-                print(f"Postprocessing/Visualization Option {sub_choice} selected. (Functionality placeholder)")
-                input("Press Enter to return to the main menu...")
-        elif selection == '8':
-            sub_choice = save_project_menu()
-            if sub_choice == '2':
-                continue
-            else:
-                print(f"Save Project Option {sub_choice} selected. (Functionality placeholder)")
-                input("Press Enter to return to the main menu...")
+                    elif sub_choice == '4':
+                        try:
+                            print("Deflection/Discplacement Plots (Plotly/Matplotlip):")
+                            style = input(colored("Choose a style (1 for Matplotlib, 2 for Plotly) ➔ ", 'cyan'))
+                            if style == '1':
+                                Plotting.Matplot_Deflection(X_Field, -Deflection)
+                            elif style == '2':
+                                Plotting.Plotly_Deflection(X_Field,-Deflection,beam_length)
+                            else:
+                                print_error("Invalid style selection!")
+                                time.sleep(2)
+                                continue
+
+                        except Exception as e:
+                            print_error(f"Error plotting Delection Plot {e}")
+                            time.sleep(2)
+                            continue
+                    elif sub_choice == '4':
+                        try:
+                            print("Stress/F.O.S Contours:")
+                            Plotting.Plotly_stress_contours(X_Field, Total_ShearForce, Total_BendingMoment)
+                        except Exception as e:
+                            print_error(f"Error plotting stress contours: {e}")
+                            time.sleep(2)
+                            continue
+        elif selection == '9':  # Save Project
+            while True:
+                    try:
+                        save_decision = input(colored("Do you want to save this solved beam? (Y/N) ➔ ", 'cyan'))
+                        print("")
+                        if save_decision.lower() == 'y':
+                            # Save extended parameters including loads, profile, and material data
+                            load_projects_from_disk()
+                            save_project(beam_length, A, B, A_restraint, B_restraint,
+                                         X_Field, Total_ShearForce, Total_BendingMoment, Reactions,
+                                         A_type, B_type,
+                                         loads_dict=loads_dict if 'loads_dict' in locals() else {},
+                                         profile_data={'Ix': Ix, 'shape': shape, 'c': c, 'b': b} if 'Ix' in locals() else {},
+                                         material_data={'material': selected_material} if 'selected_material' in locals() else {})
+                            save_projects_to_disk()
+                           
+
+                            break
+                        else:
+                            print(colored("Beam not saved. Continuing...", 'yellow'))
+                            print("")
+                            time.sleep(2)
+                            break
+                    except: print_error("No project to save!")
         else:
             print_error("Invalid selection! Please try again.")
-            input("Press Enter to return to the main menu...")
+            time.sleep(1)
 
 
-# ================================
+
+# =============================
 # Main Program Execution
-# ================================
-
+# =============================
 if __name__ == "__main__":
-    # You can call run_extended_menu() here to use the new template.
+    # Start the extended menu-driven application.
     run_extended_menu()
