@@ -1,8 +1,27 @@
 ﻿
 from termcolor import colored
 import time
+import numpy as np
 from Menus import print_error, print_success, print_title, print_option, clear_screen
 
+#  Beam Classification Setup
+
+def Beam_Classification():
+    # Prompt the user to select a beam classification.
+    print(colored("Select Beam Classification:", 'yellow'))
+    print_option("1 - Simple Supported Beam")
+    print_option("2 - Cantilever Beam")
+    #print_option("3 - Fixed Beam")
+    #print_option("4 - Continuous Beam")
+    #print_option("5 - Overhanging Beam")
+    print("")
+    classification = input(colored("Enter your choice (1-2): ➔ ", 'cyan'))
+    if classification == '1':
+        print_success("Simple Supported Beam selected.")
+        return "Simple"
+    elif classification == '2':
+        print_success("Cantilever Beam selected.")
+        return "Cantilever"
 
 def Beam_Length():
     """

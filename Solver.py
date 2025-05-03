@@ -1,5 +1,4 @@
-﻿# Solver.py
-# --------------------------------------------------------------------------------
+﻿# --------------------------------------------------------------------------------
 #           Libraries
 # --------------------------------------------------------------------------------
 import numpy as np
@@ -7,7 +6,6 @@ import numpy as np
 # --------------------------------------------------------------------------------
 #         Solver Initialization Functions
 # --------------------------------------------------------------------------------
-
 def initialize_solver(beam_length, divisions=10000):
     """
     Initialize the solver with beam length and number of divisions.
@@ -20,377 +18,381 @@ def initialize_containers(X_Field):
     """
     Initialize containers for storing results during calculations.
     """
-    Reactions = np.array([0.0, 0.0, 0.0])               # [Va, Ha, Vb]
-    Force_Reactions_Recorder = np.empty((0, 3))
-    Moment_Reactions_Recorder = np.empty((0, 2))
-    UDLs_Reactions_Recorder = np.empty((0, 2))
-    TRLs_Reactions_Recorder = np.empty((0, 2))
-    ShearForce_Recorder = np.empty((0, len(X_Field)))
-    BendingMoment_Recorder = np.empty((0, len(X_Field)))
-
-    return (Reactions, Force_Reactions_Recorder, Moment_Reactions_Recorder,
-            UDLs_Reactions_Recorder, TRLs_Reactions_Recorder,
-            ShearForce_Recorder, BendingMoment_Recorder)
+    Reactions = np.array([0.0, 0.0, 0.0])  # [Va, Ha, Vb]
+    ShearForce_Recorder = np.zeros(len(X_Field))
+    BendingMoment_Recorder = np.zeros(len(X_Field))
+    return Reactions, ShearForce_Recorder, BendingMoment_Recorder
 
 # --------------------------------------------------------------------------------
-#         REACTION SOLVER SECTION
+#         Simple Beam Reaction Solver
 # --------------------------------------------------------------------------------
-
-def Calculate_Force_Reactions(n, A, B,pointloads):
-    """Calculate reactions at supports due to a point force."""
-    Xp = pointloads[n, 0]
-    Fx = pointloads[n, 1]
-    Fy = pointloads[n, 2]
-
-    Vb = Fy * (A - Xp) / (B - A)
-    Va = -Fy - Vb
-    Ha = Fx
-
-    return Va, Vb, Ha
-
-def Calculate_Moment_Reactions(n, A, B,momentloads):
-    """Calculate reactions at supports due to a point moment."""
-    Xm = momentloads[n, 0]
-    m = momentloads[n, 1]
-
-    Vb = m / (B - A)
-    Va = -Vb
-
-    return Va, Vb
-
-def Calculate_UDL_Reactions(n, A, B,distributedloads):
-    """Calculate reactions at supports due to a Uniform Distributed Load (UDL)."""
-    Xstart = distributedloads[n, 0]
-    Xend = distributedloads[n, 1]
-    Fy = distributedloads[n, 2]
-
-    Fy_res = Fy * (Xend - Xstart)
-    X_res = Xstart + 0.5 * (Xend - Xstart)
-
-    Vb = Fy_res * (A - X_res) / (B - A)
-    Va = -Fy_res - Vb
-
-    return Va, Vb
-
-def Calculate_TRL_Reactions(n, A, B,Triangleloads):
-    """Calculate reactions at supports due to a Triangular Distributed Load."""
-    Xstart = Triangleloads[n, 0]
-    Xend = Triangleloads[n, 1]
-    Fy_start = Triangleloads[n, 2]
-    Fy_end = Triangleloads[n, 3]
-
-    if abs(Fy_start) > 0:
-        Fy_res = 0.5 * Fy_start * (Xend - Xstart)
-        X_res = Xstart + (1/3)*(Xend - Xstart)
-    else:
-        Fy_res = 0.5 * Fy_end * (Xend - Xstart)
-        X_res = Xstart + (2/3)*(Xend - Xstart)
-
-    Vb = Fy_res * (A - X_res) / (B - A)
-    Va = -Fy_res - Vb
-
-    return Va, Vb
-
-def Calculate_Reactions(A, B,
-                         Reactions,
-                         Force_Reactions_Recorder,
-                         Moment_Reactions_Recorder,
-                         UDLs_Reactions_Recorder,
-                         TRLs_Reactions_Recorder,pointloads,momentloads,distributedloads,Triangleloads):
+def calculate_all_reactions(A, B, pointloads, momentloads, distributedloads, triangleloads):
     """
-    Calculate all reactions at supports due to all types of loads.
+    Calculate reactions at supports due to all types of loads simultaneously.
+    Handles:
+    - Point Loads (pointloads)
+    - Point Moments (momentloads)
+    - Uniform Distributed Loads (distributedloads)
+    - Triangular Distributed Loads (triangleloads)
+    
+    Sign Convention:
+    - Positive vertical forces act downward
+    - Positive horizontal forces act to the right
+    - Positive moments act counter-clockwise
     """
+    Va, Vb, Ha = 0, 0, 0  # Initialize reactions (vertical, horizontal, and moment)
+
+    # Point Loads
     if pointloads.shape[0] > 0:
         for n in range(pointloads.shape[0]):
-            Va, Vb, Ha = Calculate_Force_Reactions(n, A, B, pointloads)
-            new_reaction = np.array([[Va, Ha, Vb]])
-            Force_Reactions_Recorder = np.vstack([Force_Reactions_Recorder, new_reaction])
-            Reactions[0] += Va
-            Reactions[1] += Ha
-            Reactions[2] += Vb
+            Xp, Fx, Fy = pointloads[n]
+            Vb += Fy * (A - Xp) / (B - A)
+            Va += -Fy - (Fy * (A - Xp) / (B - A))
+            Ha += Fx
 
+    # Point Moments
     if momentloads.shape[0] > 0:
         for n in range(momentloads.shape[0]):
-            Va, Vb = Calculate_Moment_Reactions(n, A, B, momentloads)
-            new_reaction = np.array([[Va, Vb]])
-            Moment_Reactions_Recorder = np.vstack([Moment_Reactions_Recorder, new_reaction])
-            Reactions[0] += Va
-            Reactions[2] += Vb
+            Xm, m = momentloads[n]
+            Vb += m / (B - A)
+            Va += -m / (B - A)
 
+    # Uniform Distributed Loads (UDL)
     if distributedloads.shape[0] > 0:
         for n in range(distributedloads.shape[0]):
-            Va, Vb = Calculate_UDL_Reactions(n, A, B, distributedloads)
-            new_reaction = np.array([[Va, Vb]])
-            UDLs_Reactions_Recorder = np.vstack([UDLs_Reactions_Recorder, new_reaction])
-            Reactions[0] += Va
-            Reactions[2] += Vb
+            Xstart, Xend, Fy = distributedloads[n]
+            Fy_res = Fy * (Xend - Xstart)
+            X_res = Xstart + 0.5 * (Xend - Xstart)
+            Vb += Fy_res * (A - X_res) / (B - A)
+            Va += -Fy_res - (Fy_res * (A - X_res) / (B - A))
 
-    if Triangleloads.shape[0] > 0:
-        for n in range(Triangleloads.shape[0]):
-            Va, Vb = Calculate_TRL_Reactions(n, A, B, Triangleloads)
-            new_reaction = np.array([[Va, Vb]])
-            TRLs_Reactions_Recorder = np.vstack([TRLs_Reactions_Recorder, new_reaction])
-            Reactions[0] += Va
-            Reactions[2] += Vb
+    # Triangular Distributed Loads (TRL)
+    if triangleloads.shape[0] > 0:
+        for n in range(triangleloads.shape[0]):
+            Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+            if abs(Fy_start) > 0:
+                Fy_res = 0.5 * Fy_start * (Xend - Xstart)
+                X_res = Xstart + (1/3) * (Xend - Xstart)
+            else:
+                Fy_res = 0.5 * Fy_end * (Xend - Xstart)
+                X_res = Xstart + (2/3) * (Xend - Xstart)
+            Vb += Fy_res * (A - X_res) / (B - A)
+            Va += -Fy_res - (Fy_res * (A - X_res) / (B - A))
 
-
-
-    return (Reactions,
-            Force_Reactions_Recorder,
-            Moment_Reactions_Recorder,
-            UDLs_Reactions_Recorder,
-            TRLs_Reactions_Recorder)
+    return Va, Vb, Ha  # Fixed: Return statement moved outside the loop
 
 # --------------------------------------------------------------------------------
-#         SHEAR FORCE AND BENDING MOMENT SOLVER SECTION
+#         cantilever Beam Reaction Solver
 # --------------------------------------------------------------------------------
-
-def Calculate_SF_BM_Force(n, A, B, X_Field, Force_Reactions_Recorder,pointloads):
-    """Calculate SF and BM from a Point Load."""
-    Xp = pointloads[n, 0]
-    Fy = pointloads[n, 2]
-    Va = Force_Reactions_Recorder[n, 0]
-    Vb = Force_Reactions_Recorder[n, 2]
-
-    ShearForce = np.zeros(len(X_Field))
-    BendingMoment = np.zeros(len(X_Field))
-
-    for i, x in enumerate(X_Field):
-        shear = 0
-        moment = 0
-        if x > A:
-            shear += Va
-            moment -= Va * (x - A)
-        if x > B:
-            shear += Vb
-            moment -= Vb * (x - B)
-        if x > Xp:
-            shear += Fy
-            moment -= Fy * (x - Xp)
-        ShearForce[i] = shear
-        BendingMoment[i] = moment
-
-    return ShearForce, BendingMoment
-
-def Calculate_SF_BM_Moment(n, A, B, X_Field, Moment_Reactions_Recorder,momentloads):
-    """Calculate SF and BM from a Point Moment."""
-    Xm = momentloads[n, 0]
-    m = momentloads[n, 1]
-    Va = Moment_Reactions_Recorder[n, 0]
-    Vb = Moment_Reactions_Recorder[n, 1]
-
-    ShearForce = np.zeros(len(X_Field))
-    BendingMoment = np.zeros(len(X_Field))
-
-    for i, x in enumerate(X_Field):
-        shear = 0
-        moment = 0
-        if x > A:
-            shear += Va
-            moment -= Va * (x - A)
-        if x > B:
-            shear += Vb
-            moment -= Vb * (x - B)
-        if x > Xm:
-            moment -= m
-        ShearForce[i] = shear
-        BendingMoment[i] = moment
-
-    return ShearForce, BendingMoment
-
-def Calculate_SF_BM_UDL(n, A, B, X_Field, UDLs_Reactions_Recorder,distributedloads):
-    """Calculate SF and BM from a Uniform Distributed Load."""
-    Xstart = distributedloads[n, 0]
-    Xend = distributedloads[n, 1]
-    Fy = distributedloads[n, 2]
-    Va = UDLs_Reactions_Recorder[n, 0]
-    Vb = UDLs_Reactions_Recorder[n, 1]
-
-    ShearForce = np.zeros(len(X_Field))
-    BendingMoment = np.zeros(len(X_Field))
-
-    for i, x in enumerate(X_Field):
-        shear = 0
-        moment = 0
-        if x > A:
-            shear += Va
-            moment -= Va * (x - A)
-        if x > B:
-            shear += Vb
-            moment -= Vb * (x - B)
-
-        if Xstart < x <= Xend:
-            shear += Fy * (x - Xstart)
-            moment -= Fy * (x - Xstart) * 0.5 * (x - Xstart)
-        elif x > Xend:
-            shear += Fy * (Xend - Xstart)
-            moment -= Fy * (Xend - Xstart) * (x - Xstart - 0.5 * (Xend - Xstart))
-
-        ShearForce[i] = shear
-        BendingMoment[i] = moment
-
-    return ShearForce, BendingMoment
-
-def Calculate_SF_BM_TRL(n, A, B, X_Field, TRLs_Reactions_Recorder,Triangleloads):
-    """Calculate SF and BM from a Triangular Distributed Load."""
-    Xstart = Triangleloads[n, 0]
-    Xend = Triangleloads[n, 1]
-    Fy_start = Triangleloads[n, 2]
-    Fy_end = Triangleloads[n, 3]
-    Va = TRLs_Reactions_Recorder[n, 0]
-    Vb = TRLs_Reactions_Recorder[n, 1]
-
-    ShearForce = np.zeros(len(X_Field))
-    BendingMoment = np.zeros(len(X_Field))
-
-    for i, x in enumerate(X_Field):
-        shear = 0
-        moment = 0
-        if x > A:
-            shear += Va
-            moment -= Va * (x - A)
-        if x > B:
-            shear += Vb
-            moment -= Vb * (x - B)
-
-        if Xstart < x <= Xend:
-            if abs(Fy_start) > 0:
-                Xbase = x - Xstart
-                F_cut = Fy_start - Xbase * (Fy_start / (Xend - Xstart))
-                R1 = 0.5 * Xbase * (Fy_start - F_cut)
-                R2 = Xbase * F_cut
-                shear += R1 + R2
-                moment -= R1 * (2/3) * Xbase + R2 * 0.5 * Xbase
-            else:
-                Xbase = x - Xstart
-                F_cut = Fy_end * (Xbase / (Xend - Xstart))
-                R = 0.5 * Xbase * F_cut
-                shear += R
-                moment -= R * (1/3) * Xbase
-        elif x > Xend:
-            if abs(Fy_start) > 0:
-                R = 0.5 * Fy_start * (Xend - Xstart)
-                Xr = Xstart + (1/3)*(Xend - Xstart)
-                shear += R
-                moment -= R * (x - Xr)
-            else:
-                R = 0.5 * Fy_end * (Xend - Xstart)
-                Xr = Xstart + (2/3)*(Xend - Xstart)
-                shear += R
-                moment -= R * (x - Xr)
-
-        ShearForce[i] = shear
-        BendingMoment[i] = moment
-
-    return ShearForce, BendingMoment
-
-def Calculate_SF_BM(X_Field, A, B,
-                    Force_Reactions_Recorder,
-                    ShearForce_Recorder,
-                    BendingMoment_Recorder,
-                    Moment_Reactions_Recorder,
-                    UDLs_Reactions_Recorder,
-                    TRLs_Reactions_Recorder,pointloads,momentloads,distributedloads,Triangleloads):
+def Calculate_Cantilever_Reactions(pointloads, momentloads, distributedloads, triangleloads):
     """
-    Calculate total Shear Force and Bending Moment for the entire beam.
+    Calculate reactions at the fixed support of a cantilever beam.
+    
+    Sign Convention:
+    - Positive vertical forces act downward
+    - Positive horizontal forces act to the right
+    - Positive moments act counter-clockwise (clockwise is negative)
     """
+    Va, Ha, Ma = 0, 0, 0  # Initialize reactions (vertical, horizontal, and moment)
+
+    # Point Loads
     if pointloads.shape[0] > 0:
         for n in range(pointloads.shape[0]):
+            Xp, Fx, Fy = pointloads[n]
+            Va += Fy
+            Ha += Fx
+            Ma -= Fy * Xp  # Clockwise moment is negative
 
-            Shear, Moment = Calculate_SF_BM_Force(n, A, B, X_Field, Force_Reactions_Recorder,pointloads)
-            ShearForce_Recorder = np.vstack([ShearForce_Recorder, Shear])
-            BendingMoment_Recorder = np.vstack([BendingMoment_Recorder, Moment])
-
+    # Point Moments
     if momentloads.shape[0] > 0:
         for n in range(momentloads.shape[0]):
+            Xm, M = momentloads[n]
+            Ma -= M
 
-            Shear, Moment =Calculate_SF_BM_Moment(n, A, B, X_Field, Moment_Reactions_Recorder,momentloads)
-            ShearForce_Recorder = np.vstack([ShearForce_Recorder, Shear])
-            BendingMoment_Recorder = np.vstack([BendingMoment_Recorder, Moment])
-
-
+    # Uniform Distributed Loads (UDL)
     if distributedloads.shape[0] > 0:
         for n in range(distributedloads.shape[0]):
+            Xstart, Xend, Fy = distributedloads[n]
+            load_length = Xend - Xstart
+            Fy_res = Fy * load_length
+            X_res = Xstart + 0.5 * load_length
+            Va += Fy_res
+            Ma -= Fy_res * X_res
 
-            Shear, Moment = Calculate_SF_BM_UDL(n, A, B, X_Field, UDLs_Reactions_Recorder,distributedloads)
-            ShearForce_Recorder = np.vstack([ShearForce_Recorder, Shear])
-            BendingMoment_Recorder = np.vstack([BendingMoment_Recorder, Moment])
+    # Triangular Distributed Loads (TRL)
+    if triangleloads.shape[0] > 0:
+        for n in range(triangleloads.shape[0]):
+            Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+            if abs(Fy_start) > 0:
+                Fy_res = 0.5 * Fy_start * (Xend - Xstart)
+                X_res = Xstart + (1/3) * (Xend - Xstart)
+            else:
+                Fy_res = 0.5 * Fy_end * (Xend - Xstart)
+                X_res = Xstart + (2/3) * (Xend - Xstart)
 
-    if Triangleloads.shape[0] > 0:
-        for n in range(Triangleloads.shape[0]):
+            Va += Fy_res
+            Ma -= Fy_res * X_res
 
-            Shear, Moment = Calculate_SF_BM_TRL(n, A, B, X_Field, TRLs_Reactions_Recorder,Triangleloads)
-            ShearForce_Recorder = np.vstack([ShearForce_Recorder, Shear])
-            BendingMoment_Recorder = np.vstack([BendingMoment_Recorder, Moment])
+    return Va, Ha, Ma  # Fixed: Return statement moved outside the loop
 
-    Total_ShearForce = np.sum(ShearForce_Recorder, axis=0)
-    Total_BendingMoment = -np.sum(BendingMoment_Recorder, axis=0)
-
-    return Total_ShearForce, Total_BendingMoment
-
-def solve_simple_beam(beam_length, A, B,
-                      pointloads_in=None,
-                      distributedloads_in=None,
-                      momentloads_in=None,
-                      triangleloads_in=None):
+# --------------------------------------------------------------------------------
+#         Simple Beam Shear Force and Bending Moment Solver
+# --------------------------------------------------------------------------------
+def calculate_sf_bm(X_Field, A, B, pointloads, momentloads, distributedloads, triangleloads, reactions):
     """
-    High-level function to solve a simple beam completely.
+    Calculate Shear Force and Bending Moment at every point along the beam.
+    Handles:
+    - Point Loads (pointloads)
+    - Point Moments (momentloads)
+    - Uniform Distributed Loads (distributedloads)
+    - Triangular Distributed Loads (triangleloads)
 
     Returns:
-    - X_Field
-    - Total_ShearForce
-    - Total_BendingMoment
-    - Reactions (Array: [Va, Ha, Vb])
+    - Total Shear Force and Bending Moment arrays
+    
+    Sign Convention:
+    - Positive shear force causes clockwise rotation
+    - Positive bending moment causes compression in the top fibers
+    """
+    Va, Ha, Vb = reactions  # Reactions from supports
+    ShearForce = np.zeros(len(X_Field))  # Initialize SF array
+    BendingMoment = np.zeros(len(X_Field))  # Initialize BM array
+
+    for i, x in enumerate(X_Field):
+        shear = 0
+        moment = 0
+
+        # Reaction Forces
+        if x > A:
+            shear += Va
+            moment -= Va * (x - A)
+        if x > B:
+            shear += Vb
+            moment -= Vb * (x - B)
+
+        # Point Loads
+        if pointloads.shape[0] > 0:
+            for n in range(pointloads.shape[0]):
+                Xp, Fx, Fy = pointloads[n]
+                if x > Xp:
+                    shear += Fy
+                    moment -= Fy * (x - Xp)
+
+        # Point Moments
+        if momentloads.shape[0] > 0:
+            for n in range(momentloads.shape[0]):
+                Xm, m = momentloads[n]
+                if x > Xm:
+                    moment -= m
+
+        # Uniform Distributed Loads (UDL)
+        if distributedloads.shape[0] > 0:
+            for n in range(distributedloads.shape[0]):
+                Xstart, Xend, Fy = distributedloads[n]
+                if Xstart < x <= Xend:
+                    shear += Fy * (x - Xstart)
+                    moment -= Fy * (x - Xstart) * 0.5 * (x - Xstart)
+                elif x > Xend:
+                    shear += Fy * (Xend - Xstart)
+                    moment -= Fy * (Xend - Xstart) * (x - Xstart - 0.5 * (Xend - Xstart))
+
+        # Triangular Distributed Loads (TRL)
+        if triangleloads.shape[0] > 0:
+            for n in range(triangleloads.shape[0]):
+                Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+                if Xstart < x <= Xend:
+                    if abs(Fy_start) > 0:
+                        Xbase = x - Xstart
+                        F_cut = Fy_start - Xbase * (Fy_start / (Xend - Xstart))
+                        R1 = 0.5 * Xbase * (Fy_start - F_cut)
+                        R2 = Xbase * F_cut
+                        shear += R1 + R2
+                        moment -= R1 * (2 / 3) * Xbase + R2 * 0.5 * Xbase
+                    else:
+                        Xbase = x - Xstart
+                        F_cut = Fy_end * (Xbase / (Xend - Xstart))
+                        R = 0.5 * Xbase * F_cut
+                        shear += R
+                        moment -= R * (1 / 3) * Xbase
+                elif x > Xend:
+                    if abs(Fy_start) > 0:
+                        R = 0.5 * Fy_start * (Xend - Xstart)
+                        Xr = Xstart + (1 / 3) * (Xend - Xstart)
+                        shear += R
+                        moment -= R * (x - Xr)
+                    else:
+                        R = 0.5 * Fy_end * (Xend - Xstart)
+                        Xr = Xstart + (2 / 3) * (Xend - Xstart)
+                        shear += R
+                        moment -= R * (x - Xr)
+
+        # Store results
+        ShearForce[i] = shear
+        BendingMoment[i] = moment
+
+    return ShearForce, -BendingMoment
+
+# --------------------------------------------------------------------------------
+#         cantilever Beam Shear Force and Bending Moment Solver
+# --------------------------------------------------------------------------------
+def Calculate_SF_BM_Cantilever(X_Field, Va, Ha, Ma, 
+                               pointloads, momentloads, distributedloads, triangleloads):
+    """
+    Calculate Shear Force and Bending Moment for a cantilever beam.
+    
+    Sign Convention:
+    - Positive shear force causes clockwise rotation
+    - Positive bending moment causes compression in the top fibers
+    - Fixed support is at X=0
+    """
+    ShearForce = np.zeros(len(X_Field))
+    BendingMoment = np.zeros(len(X_Field))
+
+    for i, x in enumerate(X_Field):
+        shear = Va
+        moment = Ma
+
+        # Point Loads
+        if pointloads.shape[0] > 0:
+            for n in range(pointloads.shape[0]):
+                Xp, Fx, Fy = pointloads[n]
+                if x >= Xp:
+                    shear -= Fy
+                    moment -= Fy * (x - Xp)
+
+        # Point Moments
+        if momentloads.shape[0] > 0:
+            for n in range(momentloads.shape[0]):
+                Xm, M = momentloads[n]
+                if x >= Xm:
+                    moment -= M
+
+        # Uniform Distributed Loads (UDL)
+        if distributedloads.shape[0] > 0:
+            for n in range(distributedloads.shape[0]):
+                Xstart, Xend, Fy = distributedloads[n]
+                if x >= Xstart:
+                    if x <= Xend:
+                        load_length = x - Xstart
+                        Fy_res = Fy * load_length
+                        shear -= Fy_res
+                        moment -= Fy_res * (load_length * 0.5)
+                    else:
+                        load_length = Xend - Xstart
+                        Fy_res = Fy * load_length
+                        shear -= Fy_res
+                        moment -= Fy_res * (load_length * 0.5 + (x - Xend))
+
+        # Triangular Distributed Loads (TRL)
+        if triangleloads.shape[0] > 0:
+            for n in range(triangleloads.shape[0]):
+                Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+                if x >= Xstart:
+                    if x <= Xend:
+                        if abs(Fy_start) > 0:
+                            Xbase = x - Xstart
+                            F_cut = Fy_start - Xbase * (Fy_start / (Xend - Xstart))
+                            R1 = 0.5 * Xbase * (Fy_start - F_cut)
+                            R2 = Xbase * F_cut
+                            shear -= R1 + R2
+                            moment -= R1 * (2/3) * Xbase + R2 * 0.5 * Xbase
+                        else:
+                            Xbase = x - Xstart
+                            F_cut = Fy_end * (Xbase / (Xend - Xstart))
+                            R = 0.5 * Xbase * F_cut
+                            shear -= R
+                            moment -= R * (1/3) * Xbase
+                    else:
+                        if abs(Fy_start) > 0:
+                            R = 0.5 * Fy_start * (Xend - Xstart)
+                            Xr = Xstart + (1/3)*(Xend - Xstart)
+                            shear -= R
+                            moment -= R * (x - Xr)
+                        else:
+                            R = 0.5 * Fy_end * (Xend - Xstart)
+                            Xr = Xstart + (2/3)*(Xend - Xstart)
+                            shear -= R
+                            moment -= R * (x - Xr)
+
+        ShearForce[i] = shear
+        BendingMoment[i] = moment
+
+    return ShearForce, BendingMoment
+
+# --------------------------------------------------------------------------------
+#         High-Level Solver
+# --------------------------------------------------------------------------------
+def solve_simple_beam(beam_length, A=None, B=None,
+                      pointloads_in=None, distributedloads_in=None,
+                      momentloads_in=None, triangleloads_in=None,
+                      beam_type="Simple"):
+    """
+    High-level function to solve a beam completely.
+    Supports simple beams (with two supports) and cantilever beams.
+
+    Parameters:
+        beam_length : float : Length of the beam
+        A, B        : float : Support positions (only for simple beams)
+        beam_type   : str   : "simple" or "cantilever"
+        
+    Returns:
+        X_Field     : ndarray : Beam position points
+        ShearForce  : ndarray : Shear force values along the beam
+        BendingMoment : ndarray : Bending moment values along the beam
+        Reactions   : ndarray : Support reactions [Va, Ha, Vb/Ma]
     """
     if pointloads_in is None:
         pointloads = np.empty((0, 3))
     else:
         pointloads = np.array(pointloads_in)
-        
+
     if distributedloads_in is None:
         distributedloads = np.empty((0, 3))
     else:
         distributedloads = np.array(distributedloads_in)
-        
+
     if momentloads_in is None:
         momentloads = np.empty((0, 2))
     else:
         momentloads = np.array(momentloads_in)
-        
-    if triangleloads_in is None:
-        Triangleloads = np.empty((0, 4))
-    else:
-        Triangleloads = np.array(triangleloads_in)
 
-    # --- Initialize Solver ---
+    if triangleloads_in is None:
+        triangleloads = np.empty((0, 4))
+    else:
+        triangleloads = np.array(triangleloads_in)
+
+    # Initialize Solver
     X_Field, Delta = initialize_solver(beam_length)
 
-    # --- Initialize Containers ---
-    (Reactions, Force_Reactions_Recorder, Moment_Reactions_Recorder,
-     UDLs_Reactions_Recorder, TRLs_Reactions_Recorder,
-     ShearForce_Recorder, BendingMoment_Recorder) = initialize_containers(X_Field)
+    if beam_type == "Simple":
+        # Ensure supports are defined for simple beam
+        if A is None or B is None:
+            raise ValueError("Support positions A and B must be provided for simple beam")
+            
+        # Solve Reactions
+        Reactions = calculate_all_reactions(A, B, pointloads, momentloads, 
+                                           distributedloads, triangleloads)
+        
+        # Solve SF and BM
+        Total_ShearForce, Total_BendingMoment = calculate_sf_bm(
+            X_Field, A, B, pointloads, momentloads, 
+            distributedloads, triangleloads, Reactions)
+            
+        # Fixed: Add return statement for simple beam
+        return X_Field, Total_ShearForce, Total_BendingMoment, Reactions
 
-    # --- Solve Reactions ---
-    (Reactions,
-     Force_Reactions_Recorder,
-     Moment_Reactions_Recorder,
-     UDLs_Reactions_Recorder,
-     TRLs_Reactions_Recorder) = Calculate_Reactions(A, B,
-                         Reactions,
-                         Force_Reactions_Recorder,
-                         Moment_Reactions_Recorder,
-                         UDLs_Reactions_Recorder,
-                         TRLs_Reactions_Recorder,pointloads,momentloads,distributedloads,Triangleloads)
+    elif beam_type == "Cantilever":
+        # --- Solve Reactions ---
+        Va, Ha, Ma = Calculate_Cantilever_Reactions(
+            pointloads, momentloads, distributedloads, triangleloads)
 
-    # --- Solve Shear Force and Bending Moment ---
-    Total_ShearForce, Total_BendingMoment = Calculate_SF_BM(X_Field, A, B,
-                    Force_Reactions_Recorder,
-                    ShearForce_Recorder,
-                    BendingMoment_Recorder,
-                    Moment_Reactions_Recorder,
-                    UDLs_Reactions_Recorder,
-                    TRLs_Reactions_Recorder,pointloads,momentloads,distributedloads,Triangleloads)
+        # --- Solve Shear Force and Bending Moment ---
+        Total_ShearForce, Total_BendingMoment = Calculate_SF_BM_Cantilever(
+            X_Field, Va, Ha, Ma, pointloads, momentloads, 
+            distributedloads, triangleloads)
 
+        Reactions = np.array([Va, Ha, Ma])
+        return X_Field, Total_ShearForce, Total_BendingMoment, Reactions
 
-    # --- RETURN EVERYTHING ---
-    return X_Field, Total_ShearForce, Total_BendingMoment, Reactions
+    else:
+        raise ValueError("Invalid beam_type. Choose 'simple' or 'cantilever'.")

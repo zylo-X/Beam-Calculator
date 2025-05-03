@@ -147,8 +147,79 @@ def Plotly_Deflection(X_Field,Deflection,beam_length):
     fig_shear = go.Figure(data=[trace_shear, trace_line], layout=layout_Deflection)
     fig_shear.show()
 
+#=====================================================
+def Plotly_ShearStress(X_Field,ShearStress,beam_length):
 
+    # --- Plotly_ShearStress Diagram Data ---  
+    x_ShearStress = X_Field
+    y_ShearStress = ShearStress
 
+    # Find max/min values and their positions for annotations
+    max_ShearStress = round(np.max(y_ShearStress), 3)
+    min_ShearStress = round(np.min(y_ShearStress), 3)
+    idx_max_ShearStress = np.argmax(y_ShearStress)
+    idx_min_ShearStress = np.argmin(y_ShearStress)
+
+# --- ShearStress Trace ---
+    trace_shear = go.Scatter(
+        x=x_ShearStress,
+        y=y_ShearStress,
+        mode="lines",
+        line=dict(color='blue', width=3),   # (Optimized: More visible line)
+        name="ShearStress",
+        hovertemplate="Position: %{x:.2f} m<br>ShearStress: %{y:.2f} N",
+        fill="tozeroy",
+        fillcolor="rgba(0,0,255,0.2)"    # (Optimized: Lighter fill)
+    )
+    
+     # --- Horizontal Axis Line (Reference) ---
+    trace_line = go.Scatter(
+        x=[0, beam_length],
+        y=[0, 0],
+        mode="lines",
+        line=dict(color="black", width=2),
+        showlegend=False
+    )
+
+# --- Annotations for Deflection ---
+    annotations_Deflection = [
+        dict(
+            x=x_ShearStress[idx_max_ShearStress],
+            y=max_ShearStress,
+            text=f"Max: {max_ShearStress} N",
+            showarrow=True,
+            arrowhead=2,
+            ax=0,
+            ay=-30,
+            font=dict(color="blue")
+        ),
+        dict(
+            x=x_ShearStress[idx_min_ShearStress],
+            y=min_ShearStress,
+            text=f"Min: {min_ShearStress} N",
+            showarrow=True,
+            arrowhead=2,
+            ax=0,
+            ay=30,
+            font=dict(color="blue")
+        )
+    ]
+        # ================================
+        #         PLOT LAYOUTS
+        # ================================
+
+# --- Layout for ShearStress Diagram ---
+    layout_ShearStress = go.Layout(
+        title="ShearStress Diagram",
+        xaxis=dict(title="Position along Beam (m)"),
+        yaxis=dict(title="ShearStress(N)"),
+        annotations=annotations_Deflection,
+        width=1000,
+        height=800
+)
+    # --- Build Figures ---
+    fig_shear = go.Figure(data=[trace_shear, trace_line], layout=layout_ShearStress)
+    fig_shear.show()
 
 
 def Plotly_bending_moment(X_Field,Total_BendingMoment,beam_length):
@@ -353,6 +424,50 @@ def Matplot_Deflection(X_Field,Deflection):
                       fontsize=12, color='blue')
 
     ax_shear.annotate(f"Min: {min_shear:.2f} N", 
+                      xy=(x_shear[idx_min_shear], min_shear), 
+                      xytext=(10, -40), textcoords='offset points',
+                      arrowprops=dict(arrowstyle="->", color='red'),
+                      fontsize=12, color='red')
+
+    ax_shear.legend()
+    ax_shear.grid(True)
+
+    # --- Show Deflection Plot Separately ---
+    fig_shear.tight_layout()
+    fig_shear.show()
+    #plt.close(fig_shear)
+
+
+def Matplot_ShearStress(X_Field,Shearstress):
+    # --- Deflection Diagram Data ---
+    x_shear = X_Field
+    y_shear = Shearstress
+
+    # Find max/min values and their positions for annotations
+    max_shear = round(np.max(y_shear), 3)
+    min_shear = round(np.min(y_shear), 3)
+    idx_max_shear = np.argmax(y_shear)
+    idx_min_shear = np.argmin(y_shear)
+
+    fig_shear, ax_shear = plt.subplots(figsize=(10, 6))
+
+    ax_shear.plot(x_shear, y_shear, color='black', linewidth=2, label='Shearstress Plot')
+    ax_shear.fill_between(x_shear, y_shear, 0, where=(y_shear >= 0), interpolate=True, alpha=0.3, color='blue')
+    ax_shear.fill_between(x_shear, y_shear, 0, where=(y_shear < 0), interpolate=True, alpha=0.3, color='red')
+
+    ax_shear.axhline(y=0, color='black', linewidth=2)
+    ax_shear.set_title('Shearstress Diagram', fontsize=16)
+    ax_shear.set_xlabel('Position along Beam (m)', fontsize=14)
+    ax_shear.set_ylabel('Shearstress (Pa)', fontsize=14)
+
+    # Annotate Max and Min points
+    ax_shear.annotate(f"Max: {max_shear:.2f} Pa", 
+                      xy=(x_shear[idx_max_shear], max_shear), 
+                      xytext=(10, 30), textcoords='offset points',
+                      arrowprops=dict(arrowstyle="->", color='blue'),
+                      fontsize=12, color='blue')
+
+    ax_shear.annotate(f"Min: {min_shear:.2f} Pa", 
                       xy=(x_shear[idx_min_shear], min_shear), 
                       xytext=(10, -40), textcoords='offset points',
                       arrowprops=dict(arrowstyle="->", color='red'),
