@@ -549,6 +549,7 @@ def run_extended_menu():
                     cprint(f"Beam Classification is {beam_type} Beam:",'white')
                     cprint("==========================================================", 'red')
                     time.sleep(1)
+                    if beam_type == "Cantilever" : project_state["supports_saved"] = True
                     break
                 else:
                     print_error("Invalid Beam Classification Please try again.")
@@ -698,7 +699,7 @@ def run_extended_menu():
             if beam_type == "Cantilever":
                 print_error("Cantilever beams Boundary Conditions Already Defined !!!!")
                 time.sleep(2)
-                break
+                
 
             elif beam_type == "Simple":
                 while True:
@@ -817,10 +818,16 @@ def run_extended_menu():
                         time.sleep(2)
                     
         elif selection == '7':  # Show Beam Schematic (Standalone)
-            if not project_state["loads_saved"] or not project_state["supports_saved"]:
-                print_error("Both loads and supports must be defined before plotting!")
-                time.sleep(2)
-                continue
+            if beam_type=='Simple':
+                if not project_state["loads_saved"] or not project_state["supports_saved"]:
+                    print_error("Both loads and supports must be defined before plotting!")
+                    time.sleep(2)
+                    continue
+            elif beam_type =='Cantilever':
+                if not project_state["loads_saved"]:
+                    print_error("Both loads and supports must be defined before plotting!")
+                    time.sleep(2)
+                    continue               
                 
             try:
                 support_types = ("pin", "roller")
@@ -865,8 +872,12 @@ def run_extended_menu():
                         cprint("==========================================================", 'red')
                         cprint("                           Supports                      ", "light_red")
                         cprint("==========================================================", 'red')
-                        print(f"Support A Position ({A_type}): {A} m")
-                        print(f"Support B Position ({B_type}): {B} m")
+                        if beam_type == "Simple":
+                            print(f"Support A Position ({A_type}): {A} m")
+                            print(f"Support B Position ({B_type}): {B} m")
+                        elif beam_type == 'Cantilever':
+                            cprint("Fixed At the Left Side","white")
+                            cprint("Free At the Right Side","white")
                         print("")
                         cprint("==========================================================", 'red')
                         cprint("                          Applied Loads                  ", "light_green")
@@ -909,7 +920,7 @@ def run_extended_menu():
                         else:
                             Va = Reactions[0]
                             Ha = Reactions[1]
-                            Vb = Reactions[2]
+                            Ma = Reactions[2]
                         max_shear = round(np.max(Total_ShearForce), 3)
                         min_shear = round(np.min(Total_ShearForce), 3)
                         max_bending = round(np.max(Total_BendingMoment), 3)
@@ -941,8 +952,9 @@ def run_extended_menu():
                         cprint("==========================================================", 'red')
                         cprint("                  Reactions Forces                       ", "white")
                         cprint("==========================================================", 'red')
-                        print(colored(f"Support A Reaction Force: RA: {Va} N", "white"))
-                        print(colored(f"Support B Reaction Force: RB: {Vb} N", "white"))
+                        print(colored(f"Support A vertical Reaction Force: RA: {Va} N", "white"))
+                        print(colored(f"Support A Horizontal Reaction Force: RB: {Ha} N", "white"))
+                        print(colored(f"Support A Moment Reaction : RB: {Ha} N.m", "white"))
                         print("")
                         cprint("==========================================================", 'red')
                         cprint("                 Max/Min Shear Force                     ", "white")
