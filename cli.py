@@ -16,7 +16,8 @@ from termcolor import colored, cprint
 from Materials_database import MaterialDatabase  # Import MaterialDatabase class
 from Solver import solve_simple_beam
 import moi_solver
-from Plotting import Matplot_Deflection, Plotly_Deflection, Plotly_sfd_bmd, Matplot_sfd_bmd, format_loads_for_plotting, Plotly_ShearStress,Matplot_ShearStress
+from Plotting import (Matplot_Deflection, Plotly_Deflection, Plotly_sfd_bmd, Matplot_sfd_bmd, format_loads_for_plotting, Plotly_ShearStress,Matplot_ShearStress,
+                      Plotly_combined_diagrams,Matplot_combined)
 from beam_plot import plot_reaction_diagram, plot_beam_schematic
 from Stress_solver import (calculate_beam_deflection, first_moment_of_area_rect, calculate_shear_stress,
                          calculate_bending_stress, Factor_of_Safety)
@@ -935,7 +936,7 @@ def run_extended_menu():
                     try:
                         clear_screen()
                         cprint("                  Analysis Results:","light_green")
-                        cprint("==========================================================", 'White')
+                        cprint("==========================================================", 'white')
                         print("")
                         cprint("==========================================================", 'red')
                         cprint("                  Reactions Forces                       ", "white")
@@ -1064,7 +1065,7 @@ def run_extended_menu():
                 if sub_choice == '1':  # Reaction forces schematic
                     try:
                         print_success("Processing Reactions Forces Schematic Plots (Plotly-only):")
-                        support_types = (A_type, B_type)
+                        support_types = ("pin", "roller")
                         plot_reaction_diagram(A, B, Reactions, support_types)
                     except Exception as e:
                         print_error(f"Error plotting reaction diagram: {e}")
@@ -1073,23 +1074,35 @@ def run_extended_menu():
                         
                 elif sub_choice == '2':  # SFD/BMD (Matplotlib)
                     try:
-                        print_success("Processing Shear Force/Bending Moment Plots (Matplotlib):")
-                        Matplot_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment)
+                        style = input(colored("Choose a style (1 for Matplotlib, 2 for Plotly) ➔ ", 'cyan'))
+                        if style == '1':
+                            print_success("Processing Shear Force/Bending Moment Plots (Matplotlib):")
+                            Matplot_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment)
+                        elif style == '2':
+                                print_success("Processing Shear Force/Bending Moment Plots (Plotly):")
+                                Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length)
+                        
                     except Exception as e:
-                        print_error(f"Error plotting using Matplotlib: {e}")
+                        print_error(f"Error in Plotting !!! : {e}")
                         time.sleep(2)
                         continue
                         
-                elif sub_choice == '3':  # SFD/BMD (Plotly)
+                elif sub_choice == '5':  # Combined (Plotly)
                     try:
-                        print_success("Processing Shear Force/Bending Moment Plots (Plotly):")
-                        Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length)
+                        style = input(colored("Choose a style (1 for Matplotlib, 2 for Plotly) ➔ ", 'cyan'))
+                        if style == '1':
+                            print_success("Processing Combined Plots (Matplotlib):")
+                            Matplot_combined(X_Field, Total_ShearForce, Total_BendingMoment, Deflection=Deflection, ShearStress=Shear_stress)
+                        elif style == '2':
+                                print_success("Processing Combined Plots (Plotly):")
+                                Plotly_combined_diagrams(X_Field, Total_ShearForce, Total_BendingMoment, beam_length, Deflection=Deflection, ShearStress=Shear_stress)
+                        
                     except Exception as e:
-                        print_error(f"Error plotting using Plotly: {e}")
+                        print_error(f"Error in Plotting !!! : {e}")
                         time.sleep(2)
                         continue
 
-                elif sub_choice == '4':  # Deflection plot
+                elif sub_choice == '3':  # Deflection plot
                     if not project_state.get("deflection_calculated", False):
                         print_error("Please calculate deflection first (in Analysis menu)!")
                         time.sleep(2)
@@ -1112,8 +1125,8 @@ def run_extended_menu():
                         time.sleep(2)
                         continue
 
-                elif sub_choice == '5':  # Stress contours
-                    if not project_state.get("stress_calculated", False):
+                elif sub_choice == '4':  # Stress contours
+                    #if not project_state.get("stress_calculated", False):
                         try:
                             style = input(colored("Choose a style (1 for Matplotlib, 2 for Plotly) ➔ ", 'cyan'))
                             if style == '1':
@@ -1131,7 +1144,7 @@ def run_extended_menu():
                             time.sleep(2)
 
 
-
+                                
         elif selection == '10':  # Save Project
             if not project_state["profile_saved"] or not project_state["material_saved"] or \
                not project_state["supports_saved"] or not project_state["loads_saved"]:

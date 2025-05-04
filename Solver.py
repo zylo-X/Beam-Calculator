@@ -154,7 +154,7 @@ def calculate_sf_bm(X_Field, A, B, pointloads, momentloads, distributedloads, tr
     - Positive shear force causes clockwise rotation
     - Positive bending moment causes compression in the top fibers
     """
-    Va, Ha, Vb = reactions  # Reactions from supports
+    Va, Vb, Ha  = reactions  # Reactions from supports
     ShearForce = np.zeros(len(X_Field))  # Initialize SF array
     BendingMoment = np.zeros(len(X_Field))  # Initialize BM array
 

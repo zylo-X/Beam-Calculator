@@ -35,7 +35,7 @@ def plot_beam_schematic(beam_length, A, B, support_types, loads):
 
 
 def plot_reaction_diagram(A, B, reactions,support_types):
-    Va, Ha, Vb = reactions
+    Va, Vb, Ha = reactions
     fig = make_subplots(rows=1, cols=1)
 
 
