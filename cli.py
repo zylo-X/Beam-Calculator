@@ -14,7 +14,7 @@ from termcolor import colored, cprint
 
 # Application modules
 from Materials_database import MaterialDatabase  # Import MaterialDatabase class
-from Solver import solve_simple_beam
+from Solver import solve_simple_beam,solve_cantilever_beam
 import moi_solver
 from Plotting import (Matplot_Deflection, Plotly_Deflection, Plotly_sfd_bmd, Matplot_sfd_bmd, format_loads_for_plotting, Plotly_ShearStress,Matplot_ShearStress,
                       Plotly_combined_diagrams,Matplot_combined)
@@ -899,15 +899,18 @@ def run_extended_menu():
                         triangleloads_in = loads.get("triangleloads", [])
                         
                         # Perform the analysis with proper arguments
-                        X_Field, Total_ShearForce, Total_BendingMoment, Reactions = solve_simple_beam(
-                            beam_length, A=A, B=B,
-                            pointloads_in=pointloads_in, 
-                            distributedloads_in=distributedloads_in,
-                            momentloads_in=momentloads_in, 
-                            triangleloads_in=triangleloads_in,
-                            beam_type=beam_type
-                        )
-                        
+                        if beam_type == "Simple":
+                            X_Field, Total_ShearForce, Total_BendingMoment, Reactions = solve_simple_beam(
+                                beam_length, A=A, B=B,
+                                pointloads_in=pointloads_in, 
+                                distributedloads_in=distributedloads_in,
+                                momentloads_in=momentloads_in, 
+                                triangleloads_in=triangleloads_in,
+                                beam_type=beam_type
+                            )
+                        elif beam_type == "Cantilever":
+                             X_Field, Total_ShearForce, Total_BendingMoment, Reactions =solve_cantilever_beam(beam_length, pointloads_in=pointloads_in,
+                                distributedloads_in=distributedloads_in,momentloads_in=momentloads_in, triangleloads_in=triangleloads_in)
                         # Mark results as available for use in other menus
                         project_state["analysis_complete"] = True
                         project_state["has_unsaved_changes"] = True
@@ -919,8 +922,8 @@ def run_extended_menu():
                             Vb = Reactions[1]
                         else:
                             Va = Reactions[0]
-                            Ha = Reactions[2]
-                            Ma = Reactions[1]
+                            Ha = Reactions[1]
+                            Ma = Reactions[2]
 
                         max_shear = round(np.max(Total_ShearForce), 3)
                         min_shear = round(np.min(Total_ShearForce), 3)
