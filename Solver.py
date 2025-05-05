@@ -89,9 +89,9 @@ def Calculate_Cantilever_Reactions(pointloads, momentloads, distributedloads, tr
     Calculate reactions at the fixed support of a cantilever beam.
     
     Sign Convention:
-    - Positive vertical forces act upwards
+    - Positive vertical forces act upwards (negative downwards)
     - Positive horizontal forces act to the right
-    - Positive moments act counterclockwise
+    - Positive moments act counterclockwise (negative clockwise)
     """
     Va, Ha, Ma = 0, 0, 0
 
@@ -99,21 +99,71 @@ def Calculate_Cantilever_Reactions(pointloads, momentloads, distributedloads, tr
     if pointloads.shape[0] > 0:
         for n in range(pointloads.shape[0]):
             Xp, Fx, Fy = pointloads[n]
-            # Assuming Fy negative is downward
-            Va -= Fy  # For equilibrium, reaction is opposite
-            Ha -= Fx  # For equilibrium, reaction is opposite
-            Ma -= Fy * Xp  # Moment due to force (negative Fy * positive Xp = negative moment)
-                          # This should be positive for counterclockwise reaction
+            # For equilibrium, reaction force is opposite direction of applied force
+            Va -= Fy  # Vertical reaction
+            Ha -= Fx  # Horizontal reaction
+            # For equilibrium, reaction moment counteracts force*lever_arm
+            # Assuming Fy positive is upward, and lever arm is Xp
+            Ma -= Fy * Xp  # Moment due to vertical force
+            Ma -= Fx * 0  # No moment from horizontal force at neutral axis
 
     # Point Moments
     if momentloads.shape[0] > 0:
         for n in range(momentloads.shape[0]):
             Xm, M = momentloads[n]
-            # For equilibrium, reaction moment is same sign
+            # For equilibrium, reaction moment is opposite of applied moment
             Ma -= M  # Assuming M positive is counterclockwise
 
-    # Other load types...
-    
+    # Uniform Distributed Loads (UDL)
+    if distributedloads.shape[0] > 0:
+        for n in range(distributedloads.shape[0]):
+            Xstart, Xend, Fy = distributedloads[n]
+            # Total force is intensity * length
+            total_force = Fy * (Xend - Xstart)
+            # Centroid of the distributed load is at the middle
+            centroid = (Xstart + Xend) / 2
+            # Vertical reaction
+            Va -= total_force
+            # Moment reaction
+            Ma -= total_force * centroid
+
+    if triangleloads.shape[0] > 0:
+        for n in range(triangleloads.shape[0]):
+            Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+            # Calculate total force of triangular load
+            # For a triangular load, total force = average intensity * length
+            avg_intensity = (Fy_start + Fy_end) / 2
+            length = Xend - Xstart
+            total_force = avg_intensity * length
+            
+            # Calculate centroid position
+            # For a trapezoidal load:
+            # If Fy_start and Fy_end are both non-zero (trapezoid)
+            if abs(Fy_start) > 0 and abs(Fy_end) > 0:
+                # Centroid formula for a trapezoid
+                h1, h2 = abs(Fy_start), abs(Fy_end)
+                centroid_offset = length * (h1 + 2*h2) / (3 * (h1 + h2))
+                if abs(Fy_start) > abs(Fy_end):
+                    # Larger at start
+                    centroid = Xstart + centroid_offset
+                else:
+                    # Larger at end
+                    centroid = Xend - centroid_offset
+            # If one end is zero (triangle)
+            elif abs(Fy_start) > 0:
+                # Triangle with max at start - centroid at 1/3 from start
+                centroid = Xstart + length/3
+            elif abs(Fy_end) > 0:
+                # Triangle with max at end - centroid at 2/3 from start
+                centroid = Xstart + 2*length/3
+            else:
+                # Both zero (shouldn't happen)
+                centroid = (Xstart + Xend) / 2
+            
+            # Add to reactions
+            Va -= total_force
+            Ma -= total_force * centroid
+
     return Va, Ha, Ma
 
 # --------------------------------------------------------------------------------
@@ -227,69 +277,107 @@ def Calculate_SF_BM_Cantilever(X_Field, Va, Ha, Ma, pointloads, momentloads, dis
     """
     ShearForce = np.zeros(len(X_Field))
     BendingMoment = np.zeros(len(X_Field))
+    beam_length = X_Field[-1]  # Get beam length from the last X value
 
+    # For cantilever beam, we'll use a right-to-left analysis approach
+    # This better matches the physical behavior and calculation approach shown in your PDF
+    
+    # Initialize at free end (right)
+    # For each section from right to left
     for i, x in enumerate(X_Field):
-        # Initialize with reaction values
-        shear = Va
-        moment = Ma  # At fixed end, moment equals reaction moment
+        shear = 0
+        moment = 0
         
-        # Reaction force (Va) creates moment along the beam
-        # Upward reaction (positive Va) creates counterclockwise moment at fixed end
-        # But as we move along the beam, this creates negative moment (clockwise)
-        moment -= Va * x
-        
-        # Point Loads
+        # Point Loads - contributions from all point loads right of position x
         if pointloads.shape[0] > 0:
             for n in range(pointloads.shape[0]):
                 Xp, Fx, Fy = pointloads[n]
-                if x >= Xp:
-                    # Fy is negative for downward - we subtract it from our shear
-                    shear += Fy  # This reduces shear (since Fy is negative)
-                    
-                    # Downward force (negative Fy) at Xp creates positive moment for x > Xp
-                    # The moment arm is (x - Xp)
-                    moment += Fy * (x - Xp)  # This reduces moment (since Fy is negative)
-
-        # Point Moments
-        if momentloads.shape[0] > 0:
-            for n in range(momentloads.shape[0]):
-                Xm, M = momentloads[n]
-                if x >= Xm:
-                    # M is directly added to moment
-                    # M is negative for clockwise moment
-                    moment += M  # This reduces moment (since M is negative)
-
-        # Uniform Distributed Loads (UDL)
+                # If the point load is to the right of our current position
+                if Xp > x:
+                    # Force is negative when acting downward
+                    shear -= Fy  # Add to shear in appropriate direction
+                    moment -= Fy * (Xp - x)  # Add moment contribution
+        
+        # Distributed Loads - partial contributions as needed
         if distributedloads.shape[0] > 0:
             for n in range(distributedloads.shape[0]):
                 Xstart, Xend, Fy = distributedloads[n]
-                if x >= Xstart:
-                    if x <= Xend:
-                        # Partial load effect
-                        load_length = x - Xstart
-                        Fy_res = Fy * load_length  # Fy negative for downward
-                        centroid_x = Xstart + load_length/2
-                        
-                        # Add to shear (reduces it since Fy is negative)
-                        shear += Fy_res
-                        
-                        # Add to moment (reduces it since Fy_res is negative)
-                        moment += Fy_res * (x - centroid_x)
-                    else:
-                        # Full load effect
-                        load_length = Xend - Xstart
-                        Fy_res = Fy * load_length
-                        centroid_x = Xstart + load_length/2
-                        
-                        shear += Fy_res
-                        moment += Fy_res * (x - centroid_x)
+                # Only consider portions of UDL to the right of current position
+                if Xend > x:
+                    start_pos = max(x, Xstart)  # Start from either x or load start
+                    load_length = Xend - start_pos
+                    load_total = Fy * load_length
+                    load_centroid = start_pos + load_length/2
+                    shear -= load_total
+                    moment -= load_total * (load_centroid - x)
+        
+        # Moment Loads - contributions from all moment loads right of position x
+        if momentloads.shape[0] > 0:
+            for n in range(momentloads.shape[0]):
+                Xm, M = momentloads[n]
+                if Xm > x:
+                    moment -= M  # Add moment directly (assuming CCW positive)
+        
 
-        # Triangle load handling would go here...
+    
+        # Triangular Distributed Loads (TRL)
+        if triangleloads.shape[0] > 0:
+            for n in range(triangleloads.shape[0]):
+                Xstart, Xend, Fy_start, Fy_end = triangleloads[n]
+                
+                # Only consider portions of triangular load to the right of current position
+                if Xend > x:
+                    start_pos = max(x, Xstart)
+                    
+                    # If fully to the right of x
+                    if start_pos == x:
+                        # Calculate the intensity at position x using linear interpolation
+                        t = (x - Xstart) / (Xend - Xstart) if Xend > Xstart else 0
+                        Fy_at_x = Fy_start + t * (Fy_end - Fy_start)
+                        
+                        # Calculate remaining triangular load properties
+                        remaining_length = Xend - x
+                        
+                        # For the part of the load to the right of x
+                        # We need to treat this as a trapezoid from x to Xend
+                        avg_intensity = (Fy_at_x + Fy_end) / 2
+                        total_force = avg_intensity * remaining_length
+                        
+                        # Calculate centroid position of the remaining part
+                        if abs(Fy_at_x) > 0 and abs(Fy_end) > 0:
+                            # Centroid formula for a trapezoid
+                            h1, h2 = abs(Fy_at_x), abs(Fy_end)
+                            centroid_offset = remaining_length * (h1 + 2*h2) / (3 * (h1 + h2))
+                            if abs(Fy_at_x) > abs(Fy_end):
+                                # Larger at current position
+                                centroid = x + centroid_offset
+                            else:
+                                # Larger at end
+                                centroid = Xend - centroid_offset
+                        elif abs(Fy_at_x) > 0:
+                            # Triangle with max at current position
+                            centroid = x + remaining_length/3
+                        elif abs(Fy_end) > 0:
+                            # Triangle with max at end
+                            centroid = x + 2*remaining_length/3
+                        else:
+                            # Both zero (shouldn't happen)
+                            centroid = (x + Xend) / 2
+                            
+                        # Add to shear and moment
+                        shear -= total_force
+                        moment -= total_force * (centroid - x)
 
+        # Store calculated values
         ShearForce[i] = shear
         BendingMoment[i] = moment
+    
+    # Calculate fixed-end reactions to ensure equilibrium
+    # These should match the calculated Va, Ha, Ma
+    BendingMoment[0] = Ma  # Fixed-end moment
 
     return ShearForce, BendingMoment
+
 # --------------------------------------------------------------------------------
 #         High-Level Solver
 # --------------------------------------------------------------------------------
@@ -430,8 +518,8 @@ def solve_cantilever_beam(beam_length, pointloads_in=None, distributedloads_in=N
     ShearForce, BendingMoment = Calculate_SF_BM_Cantilever(
         X_Field, Va, Ha, Ma, pointloads, momentloads, 
         distributedloads, triangleloads)
-    BendingMoment[-1] = 0
+    CorrectedBendingMoment = -BendingMoment
     # Pack reactions into an array
     Reactions = np.array([Va, Ha, Ma])
     
-    return X_Field, ShearForce, -BendingMoment, Reactions
+    return X_Field, ShearForce, CorrectedBendingMoment, Reactions
