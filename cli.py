@@ -919,8 +919,9 @@ def run_extended_menu():
                             Vb = Reactions[1]
                         else:
                             Va = Reactions[0]
-                            Ha = Reactions[1]
-                            Ma = Reactions[2]
+                            Ha = Reactions[2]
+                            Ma = Reactions[1]
+
                         max_shear = round(np.max(Total_ShearForce), 3)
                         min_shear = round(np.min(Total_ShearForce), 3)
                         max_bending = round(np.max(Total_BendingMoment), 3)
@@ -952,10 +953,16 @@ def run_extended_menu():
                         cprint("==========================================================", 'red')
                         cprint("                  Reactions Forces                       ", "white")
                         cprint("==========================================================", 'red')
-                        print(colored(f"Support A vertical Reaction Force: RA: {Va} N", "white"))
-                        print(colored(f"Support A Horizontal Reaction Force: RB: {Ha} N", "white"))
-                        print(colored(f"Support A Moment Reaction : RB: {Ha} N.m", "white"))
-                        print("")
+                        if beam_type=="Cantilever":
+                            print(colored(f"Support A vertical Reaction Force: RA: {Va} N", "white"))
+                            print(colored(f"Support A Horizontal Reaction Force: Ha: {Ha} N", "white"))
+                            print(colored(f"Support A Moment Reaction : Ma: {Ma} N.m", "white"))
+                            print("")
+                        else:
+                            print(colored(f"Support A vertical Reaction Force: RA: {Va} N", "white"))
+                            print(colored(f"Support A Horizontal Reaction Force: Ha: {Ha} N", "white"))
+                            print(colored(f"Support B vertical Reaction : Ma: {Vb} N", "white"))
+                            print("")
                         cprint("==========================================================", 'red')
                         cprint("                 Max/Min Shear Force                     ", "white")
                         cprint("==========================================================", 'red')      

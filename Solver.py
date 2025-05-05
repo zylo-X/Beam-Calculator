@@ -93,7 +93,7 @@ def Calculate_Cantilever_Reactions(pointloads, momentloads, distributedloads, tr
     - Positive horizontal forces act to the right
     - Positive moments act counter-clockwise (clockwise is negative)
     """
-    Va, Ha, Ma = 0, 0, 0  # Initialize reactions (vertical, horizontal, and moment)
+    Va,Ma, Ha  = 0, 0, 0  # Initialize reactions (vertical, horizontal, and moment)
 
     # Point Loads
     if pointloads.shape[0] > 0:
@@ -133,7 +133,7 @@ def Calculate_Cantilever_Reactions(pointloads, momentloads, distributedloads, tr
             Va += Fy_res
             Ma -= Fy_res * X_res
 
-    return Va, Ha, Ma  # Fixed: Return statement moved outside the loop
+    return Va,Ma, Ha   # Fixed: Return statement moved outside the loop
 
 # --------------------------------------------------------------------------------
 #         Simple Beam Shear Force and Bending Moment Solver
@@ -235,7 +235,7 @@ def calculate_sf_bm(X_Field, A, B, pointloads, momentloads, distributedloads, tr
 # --------------------------------------------------------------------------------
 #         cantilever Beam Shear Force and Bending Moment Solver
 # --------------------------------------------------------------------------------
-def Calculate_SF_BM_Cantilever(X_Field, Va, Ha, Ma, 
+def Calculate_SF_BM_Cantilever(X_Field,Va,Ma,Ha,
                                pointloads, momentloads, distributedloads, triangleloads):
     """
     Calculate Shear Force and Bending Moment for a cantilever beam.
@@ -383,15 +383,15 @@ def solve_simple_beam(beam_length, A=None, B=None,
 
     elif beam_type == "Cantilever":
         # --- Solve Reactions ---
-        Va, Ha, Ma = Calculate_Cantilever_Reactions(
+        Va,Ma,Ha = Calculate_Cantilever_Reactions(
             pointloads, momentloads, distributedloads, triangleloads)
 
         # --- Solve Shear Force and Bending Moment ---
         Total_ShearForce, Total_BendingMoment = Calculate_SF_BM_Cantilever(
-            X_Field, Va, Ha, Ma, pointloads, momentloads, 
+            X_Field, Va,Ma, Ha , pointloads, momentloads, 
             distributedloads, triangleloads)
 
-        Reactions = np.array([Va, Ha, Ma])
+        Reactions = np.array([Va,Ma,Ha])
         return X_Field, Total_ShearForce, Total_BendingMoment, Reactions
 
     else:
