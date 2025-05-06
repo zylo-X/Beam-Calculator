@@ -837,7 +837,133 @@ def Plotly_combined_diagrams(X_Field, Total_ShearForce, Total_BendingMoment, bea
         )
     
     fig.show()
+#=====================================
+def Plotly_BendingStress(X_Field, BendingStress, beam_length):
+    """
+    Create Plotly visualization of bending stress along the beam.
+    
+    Parameters:
+    -----------
+    X_Field : numpy.ndarray
+        X-coordinates along the beam
+    BendingStress : numpy.ndarray
+        Bending stress values at each point
+    beam_length : float
+        Total length of the beam
+    """
+    # Handle 2D BendingStress matrix if present
+    if len(BendingStress.shape) > 1:
+        # Option 1: Take maximum stress at each position (conservative approach)
+        BendingStress = np.max(np.abs(BendingStress), axis=1)
+        
+        # Option 2: Take stress at extreme fiber (normally the maximum)
+        # For example, if the stress at the extreme fiber (top or bottom) is of interest:
+        # stress_to_plot = BendingStress[:, 0]  # or BendingStress[:, -1] for bottom fiber
+    else:
+        BendingStress = BendingStress
+    
+    # --- Bending Stress Diagram Data ---
+    x_stress = X_Field
+    y_stress = BendingStress
 
+    # Find max/min values and their positions for annotations
+    max_stress = round(np.max(y_stress), 3)
+    min_stress = round(np.min(y_stress), 3)
+    idx_max_stress = np.argmax(y_stress)
+    idx_min_stress = np.argmin(y_stress)
+
+    # --- Bending Stress Trace ---
+    trace_stress = go.Scatter(
+        x=x_stress,
+        y=y_stress,
+        mode="lines",
+        line=dict(color='#8c564b', width=3),  # Professional brown
+        name="Bending Stress",
+        hovertemplate="Position: %{x:.2f} m<br>Bending Stress: %{y:.2e} Pa",
+        fill="tozeroy",
+        fillcolor="rgba(140,86,75,0.2)"  # Matching brown with transparency
+    )
+    
+    # --- Horizontal Axis Line (Reference) ---
+    trace_line = go.Scatter(
+        x=[0, beam_length],
+        y=[0, 0],
+        mode="lines",
+        line=dict(color="black", width=1.5, dash='dot'),
+        showlegend=False
+    )
+
+    # --- Annotations for Bending Stress ---
+    annotations_stress = [
+        dict(
+            x=x_stress[idx_max_stress],
+            y=max_stress,
+            text=f"Max: {max_stress:.2e} Pa",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=1.5,
+            ax=0,
+            ay=-30,
+            font=dict(color="#8c564b", size=12)
+        ),
+        dict(
+            x=x_stress[idx_min_stress],
+            y=min_stress,
+            text=f"Min: {min_stress:.2e} Pa",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=1.5,
+            ax=0,
+            ay=30,
+            font=dict(color="#8c564b", size=12)
+        )
+    ]
+
+    # --- Layout for Bending Stress Diagram ---
+    layout_stress = go.Layout(
+        title={
+            'text': "Bending Stress Diagram",
+            'font': {'size': 24, 'family': 'Arial, sans-serif'}
+        },
+        xaxis=dict(
+            title={
+                'text': "Position along Beam (m)",
+                'font': {'size': 14, 'family': 'Arial, sans-serif'}
+            },
+            showgrid=True,
+            gridcolor='rgba(211,211,211,0.5)',
+            mirror=True,
+            linecolor='black',
+            linewidth=1
+        ),
+        yaxis=dict(
+            title={
+                'text': "Bending Stress (Pa)",
+                'font': {'size': 14, 'family': 'Arial, sans-serif'}
+            },
+            showgrid=True,
+            gridcolor='rgba(211,211,211,0.5)',
+            mirror=True,
+            linecolor='black',
+            linewidth=1,
+            exponentformat='e'
+        ),
+        annotations=annotations_stress,
+        width=800,
+        height=500,
+        margin=dict(l=80, r=50, t=80, b=80),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        hovermode='closest'
+    )
+    
+    # --- Build Figures ---
+    fig_stress = go.Figure(data=[trace_stress, trace_line], layout=layout_stress)
+    fig_stress.show()
+
+#=====================================
 
 def Plotly_sfd_bmd(X_Field, Total_ShearForce, Total_BendingMoment, beam_length):
     """
@@ -1326,7 +1452,7 @@ def Matplot_Deflection(X_Field, Deflection):
     plt.show()
 
 
-def Matplot_ShearStress(X_Field, Shearstress):
+def Matplot_ShearStress(X_Field, Shear_stress):
     """
     Create professional Matplotlib visualization of shear stress.
     
@@ -1349,7 +1475,7 @@ def Matplot_ShearStress(X_Field, Shearstress):
         ShearStress = ShearStress
     # --- Shear Stress Diagram Data ---
     x_stress = X_Field
-    y_stress = Shearstress
+    y_stress = Shear_stress
 
     # Find max/min values and their positions for annotations
     max_stress = round(np.max(y_stress), 3)
@@ -1769,6 +1895,101 @@ def Matplot_combined(X_Field, Total_ShearForce, Total_BendingMoment, Deflection=
     plt.tight_layout(rect=[0, 0, 1, 0.97])  # Adjust for the suptitle
     plt.show()
 
+#====================================================================
+
+def Matplot_BendingStress(X_Field, BendingStress):
+    """
+    Create professional Matplotlib visualization of bending stress.
+    
+    Parameters:
+    -----------
+    X_Field : numpy.ndarray
+        X-coordinates along the beam
+    BendingStress : numpy.ndarray
+        Bending stress values at each point
+    """
+    # Handle 2D BendingStress matrix if present
+    if len(BendingStress.shape) > 1:
+        BendingStress = np.max(np.abs(BendingStress), axis=1)
+    else:
+        BendingStress = BendingStress
+    
+    # --- Bending Stress Diagram Data ---
+    x_stress = X_Field
+    y_stress = BendingStress
+
+    # Find max/min values and their positions for annotations
+    max_stress = round(np.max(y_stress), 3)
+    min_stress = round(np.min(y_stress), 3)
+    idx_max_stress = np.argmax(y_stress)
+    idx_min_stress = np.argmin(y_stress)
+
+    # Set up professional styling
+    plt.rcParams['font.family'] = 'Arial'
+    plt.rcParams['axes.linewidth'] = 1.5
+    plt.rcParams['axes.edgecolor'] = 'black'
+    plt.rcParams['grid.linestyle'] = '--'
+    plt.rcParams['grid.alpha'] = 0.7
+    
+    # Create figure with proper sizing
+    fig_stress, ax_stress = plt.subplots(figsize=(10, 6), dpi=100)
+
+    # Plot with professional styling
+    ax_stress.plot(x_stress, y_stress, color='#8c564b', linewidth=2.5, label='Bending Stress')
+    
+    # Fill areas with appropriate colors
+    ax_stress.fill_between(x_stress, y_stress, 0, where=(y_stress >= 0), interpolate=True, 
+                           alpha=0.3, color='#8c564b')
+    ax_stress.fill_between(x_stress, y_stress, 0, where=(y_stress < 0), interpolate=True, 
+                           alpha=0.3, color='#ff9896')
+
+    # Add reference line
+    ax_stress.axhline(y=0, color='black', linewidth=1.5, linestyle='--')
+    
+    # Set title and labels with professional styling
+    ax_stress.set_title('Bending Stress Diagram', fontsize=22, pad=20)
+    ax_stress.set_xlabel('Position along Beam (m)', fontsize=14, labelpad=10)
+    ax_stress.set_ylabel('Bending Stress (Pa)', fontsize=14, labelpad=10)
+
+    # Annotate Maximum and Minimum values with scientific notation
+    ax_stress.annotate(f"Max: {max_stress:.2e} Pa", 
+                       xy=(x_stress[idx_max_stress], max_stress), 
+                       xytext=(10, 20), textcoords='offset points',
+                       arrowprops=dict(arrowstyle="->", color='#8c564b', lw=1.5),
+                       fontsize=12, color='#8c564b', fontweight='bold')
+
+    ax_stress.annotate(f"Min: {min_stress:.2e} Pa", 
+                       xy=(x_stress[idx_min_stress], min_stress), 
+                       xytext=(10, -30), textcoords='offset points',
+                       arrowprops=dict(arrowstyle="->", color='#ff9896', lw=1.5),
+                       fontsize=12, color='#ff9896', fontweight='bold')
+
+    # Add legend, grid, and customize ticks
+    ax_stress.legend(loc='best', fontsize=12)
+    ax_stress.tick_params(axis='both', which='major', labelsize=12, width=1.5, length=5)
+    
+    # Remove top and right spines for cleaner look
+    ax_stress.spines['top'].set_visible(False)
+    ax_stress.spines['right'].set_visible(False)
+    
+    # Improve x-axis tick locating
+    ax_stress.xaxis.set_major_locator(MaxNLocator(nbins=10))
+    
+    # Set y-axis to use scientific notation
+    ax_stress.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
+    
+    # Add subtle grid to improve readability
+    ax_stress.grid(True, linestyle='--', alpha=0.5, color='gray')
+
+    # Show plot with tight layout
+    fig_stress.tight_layout()
+    plt.show()
+
+
+
+
+
+
 
 # =====================================
 # Helper Functions for Plotting
@@ -1816,9 +2037,9 @@ def format_loads_for_plotting(loads_dict):
         pos, moment = mom
         formatted_loads.append(("moment", pos, moment))
     
-    # Process triangular loads if provided.
+    # Process triangular loads:
     for trl in loads_dict.get("triangleloads", []):
-        # Assuming each triangular load is defined as [start, end, start_intensity, end_intensity]
+        # Triangular load defined as [start, end, intensity_start, intensity_end]
         start, end, intensity_start, intensity_end = trl
         formatted_loads.append(("trl", start, end, intensity_start, intensity_end))
     
